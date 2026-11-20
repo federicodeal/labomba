@@ -17,7 +17,7 @@
     <div class="counter in"><div class="n" id="cE">0</div><div class="l">Entraron</div></div>
   </div>
   <p class="hint" id="quota" style="margin:-4px 0 10px;font-size:12px"></p>
-  <div class="tabs"><button class="tab on" data-t="inv">Invitados directos</button><button class="tab" data-t="pag">Pagos por aprobar<span class="pill hidden" id="pp">0</span></button></div>
+  <div class="tabs" style="grid-template-columns:1fr 1fr .7fr"><button class="tab on" data-t="inv">Invitados</button><button class="tab" data-t="pag">Pagos<span class="pill hidden" id="pp">0</span></button><button class="tab" data-t="rp">RRPP</button></div>
 
   <div id="t-inv">
     <form class="card form" id="addOne">
@@ -40,6 +40,21 @@
   </div>
 
   <div id="t-pag" class="hidden"><div class="list" id="listPend"></div></div>
+
+  <div id="t-rp" class="hidden">
+    <form class="card form" id="rpForm">
+      <h3 id="rpTitle">Nuevo RRPP</h3>
+      <input name="nombre" placeholder="Nombre del RRPP" maxlength="60">
+      <input name="clave" inputmode="numeric" placeholder="Clave (4 a 6 números)" maxlength="6" autocomplete="off">
+      <label class="row" style="align-items:center"><input type="checkbox" name="puedeInvitar" checked style="width:auto"> <span class="hint">Puede cargar invitados</span></label>
+      <input name="tope" type="number" min="0" placeholder="Tope de invitados (vacío = sin límite)">
+      <label class="row" style="align-items:center"><input type="checkbox" name="puedeLink" checked style="width:auto"> <span class="hint">Tiene link de pago propio</span></label>
+      <div class="row"><button class="btn" style="flex:1">Guardar RRPP</button><button type="button" class="btn ghost hidden" id="rpCancel" style="flex:0 0 auto;width:auto">Cancelar</button></div>
+      <div class="err" id="rerr"></div>
+    </form>
+    <p class="hint" style="margin-bottom:10px">Los RRPP entran en <b id="rpUrl"></b> con su clave.</p>
+    <div class="list" id="listRp"></div>
+  </div>
 </div>
 </div>
 <div id="modal" class="modal hidden"></div>
@@ -48,6 +63,7 @@
 let PIN = sessionStorage.getItem('lb_pin') || '', DATA = { items: [] };
 async function login(p) {
   const r = await api('login', { pin: p });
+  if (r.rol === 'rrpp') { location.href = 'rrpp.html'; throw new Error('Sos RRPP: entrá por rrpp.html'); }
   if (r.rol !== 'admin') throw new Error('Ese PIN es del escáner, no del panel');
   PIN = p; sessionStorage.setItem('lb_pin', p);
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); load();
@@ -59,7 +75,7 @@ if (PIN) login(PIN).catch(() => sessionStorage.removeItem('lb_pin'));
 
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
-  $('#t-inv').classList.toggle('hidden', t.dataset.t !== 'inv'); $('#t-pag').classList.toggle('hidden', t.dataset.t !== 'pag');
+  ['inv', 'pag', 'rp'].forEach(k => $('#t-' + k).classList.toggle('hidden', t.dataset.t !== k));
 });
 
 async function load() {
@@ -93,8 +109,9 @@ function card(o, pend) {
     '<button class="btn sm ghost" data-a="copiar">Copiar link</button>' +
     (o.usado ? '<button class="btn sm danger" data-a="desmarcar">Desmarcar entrada</button>' : '');
   else if (o.estado === 'rechazado') btns = '<button class="btn sm ghost" data-a="aprobar">Aprobar igual</button>';
+  btns += '<button class="btn sm danger" data-a="borrar" title="Borrar entrada">🗑</button>';
   return '<div class="person" data-t="' + esc(o.token) + '"><div class="top"><div class="av">' + esc(initials(o.nombre)) + '</div>' +
-    '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? 'Pagó · ' : 'Invitado · ') + esc(o.creado) + '</small></div>' + chip(o) + '</div>' +
+    '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? 'Pagó · ' : 'Invitado · ') + esc(o.creado) + (o.rrpp ? ' · RRPP <b style="display:inline;font-size:12px;color:var(--red2)">' + esc(o.rrppNombre || o.rrpp) + '</b>' : '') + '</small></div>' + chip(o) + '</div>' +
     '<div class="row">' + btns + '</div></div>';
 }
 function render() {
@@ -103,7 +120,57 @@ function render() {
   $('#listAll').innerHTML = all.map(o => card(o, false)).join('') || '<p class="hint">Todavía no hay entradas.</p>';
   const p = DATA.items.filter(o => o.estado === 'pendiente');
   $('#listPend').innerHTML = p.map(o => card(o, true)).join('') || '<p class="hint">No hay pagos pendientes 🎉</p>';
+  renderRp();
 }
+function rpPerms(x) {
+  const c = [];
+  if (x.puedeInvitar) c.push(x.tope ? 'Invita hasta ' + x.tope : 'Invita sin límite');
+  if (x.puedeLink) c.push('Link de pago');
+  return c.map(t => '<span class="chip" style="margin-right:4px">' + esc(t) + '</span>').join('');
+}
+function renderRp() {
+  $('#rpUrl').textContent = (DATA.siteUrl || '') + 'rrpp.html';
+  $('#listRp').innerHTML = (DATA.rrpp || []).map(x => {
+    const s = x.stats;
+    return '<div class="person" data-slug="' + esc(x.slug) + '" style="' + (x.activo ? '' : 'opacity:.55') + '"><div class="top"><div class="av">' + esc(initials(x.nombre)) + '</div>' +
+      '<div class="info"><b>' + esc(x.nombre) + (x.activo ? '' : ' · desactivado') + '</b><small>' + rpPerms(x) + '</small>' +
+      '<small>Invitados ' + s.invitados + (x.tope ? '/' + x.tope : '') + ' · Vendidas ' + s.vendidas + ' · Pendientes ' + s.pendientes + ' · Entraron ' + s.entraron + '</small></div></div>' +
+      '<div class="row">' + (x.puedeLink ? '<button class="btn sm ghost" data-r="copiar">Copiar link</button><a class="btn sm wa" target="_blank" href="https://wa.me/?text=' + encodeURIComponent('Entradas LA BOMBA (sáb 21/11): ' + x.link) + '">WhatsApp</a>' : '') +
+      '<button class="btn sm ghost" data-r="editar">Editar</button><button class="btn sm ' + (x.activo ? 'danger' : 'ok') + '" data-r="activo">' + (x.activo ? 'Desactivar' : 'Activar') + '</button></div></div>';
+  }).join('') || '<p class="hint">Todavía no hay RRPP.</p>';
+}
+let editSlug = null;
+function rpReset() { editSlug = null; $('#rpForm').reset(); $('#rpForm').nombre.disabled = false; $('#rpTitle').textContent = 'Nuevo RRPP'; $('#rpForm').clave.placeholder = 'Clave (4 a 6 números)'; $('#rpCancel').classList.add('hidden'); }
+$('#rpCancel').onclick = rpReset;
+$('#rpForm').onsubmit = async e => {
+  e.preventDefault(); const f = e.target, err = $('#rerr'); err.textContent = '';
+  const d = { pin: PIN, puedeInvitar: f.puedeInvitar.checked, puedeLink: f.puedeLink.checked, tope: Number(f.tope.value) || 0 };
+  if (!d.puedeInvitar && !d.puedeLink) return err.textContent = 'Marcá al menos una opción';
+  const clave = f.clave.value.trim();
+  if (clave || !editSlug) { if (!/^\d{4,6}$/.test(clave)) return err.textContent = 'La clave tiene que ser de 4 a 6 números'; d.clave = clave; }
+  const b = f.querySelector('button'); b.disabled = true;
+  try {
+    if (editSlug) await api('rrpp_editar', Object.assign(d, { slug: editSlug }));
+    else { if (!f.nombre.value.trim()) throw new Error('Poné el nombre'); await api('rrpp_crear', Object.assign(d, { nombre: f.nombre.value.trim() })); }
+    rpReset(); await load();
+  } catch (x) { err.textContent = x.message; }
+  b.disabled = false;
+};
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-r]'); if (!b) return;
+  const slug = b.closest('.person').dataset.slug, x = DATA.rrpp.find(r => r.slug === slug), a = b.dataset.r;
+  if (a === 'copiar') { await navigator.clipboard.writeText(x.link).catch(() => prompt('Copiá el link:', x.link)); b.textContent = 'Copiado'; return; }
+  if (a === 'editar') {
+    const f = $('#rpForm'); editSlug = slug; f.nombre.value = x.nombre; f.nombre.disabled = true; f.clave.value = '';
+    f.clave.placeholder = 'Nueva clave (vacío = no cambia)'; f.puedeInvitar.checked = x.puedeInvitar; f.puedeLink.checked = x.puedeLink;
+    f.tope.value = x.tope || ''; $('#rpTitle').textContent = 'Editar ' + x.nombre; $('#rpCancel').classList.remove('hidden'); scrollTo(0, f.offsetTop - 10); return;
+  }
+  if (a === 'activo') {
+    if (x.activo && !confirm('¿Desactivar a ' + x.nombre + '? No va a poder entrar y su link deja de marcarse.')) return;
+    b.disabled = true;
+    try { await api('rrpp_editar', { pin: PIN, slug, activo: !x.activo }); await load(); } catch (err) { alert(err.message); b.disabled = false; }
+  }
+});
 $('#q').oninput = render;
 
 document.addEventListener('click', async e => {
@@ -111,6 +178,7 @@ document.addEventListener('click', async e => {
   const token = b.closest('.person').dataset.t, a = b.dataset.a, o = DATA.items.find(x => x.token === token);
   if (a === 'copiar') { await navigator.clipboard.writeText(ticketUrl(token)).catch(() => prompt('Copiá el link:', ticketUrl(token))); b.textContent = 'Copiado'; return; }
   if (a === 'rechazar' && !confirm('¿Rechazar el pago de ' + o.nombre + '?')) return;
+  if (a === 'borrar' && !confirm('¿Borrar la entrada de ' + o.nombre + '? Su QR deja de valer.')) return;
   if (a === 'desmarcar' && !confirm('¿Marcar que ' + o.nombre + ' todavía no entró?')) return;
   b.disabled = true; const t0 = b.textContent; b.textContent = '…';
   try {

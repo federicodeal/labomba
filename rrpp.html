@@ -1,0 +1,120 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>RRPP · LA BOMBA</title><link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page">
+<div id="login" class="card form" style="margin-top:40px;text-align:center">
+  <img src="assets/bomb.svg" style="width:70px;margin:0 auto" alt=""><div class="logo" style="font-size:48px">LA BOMBA</div>
+  <div class="kicker">Panel RRPP</div>
+  <input id="pin" type="password" inputmode="numeric" placeholder="Tu clave" style="text-align:center;font-size:22px;letter-spacing:.3em">
+  <div class="err" id="lerr"></div><button class="btn" id="go">Entrar</button>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar"><div class="brand"><img src="assets/bomb.svg" alt=""><span class="logo">LA BOMBA</span></div>
+    <div class="row" style="align-items:center"><span class="kicker" id="who"></span><button class="btn sm ghost" id="out">Salir</button></div></div>
+  <div class="counters" style="grid-template-columns:repeat(4,1fr)">
+    <div class="counter okc"><div class="n" id="sI">0</div><div class="l">Invitados</div></div>
+    <div class="counter okc"><div class="n" id="sV">0</div><div class="l">Vendidas</div></div>
+    <div class="counter pend"><div class="n" id="sP">0</div><div class="l">Pendientes</div></div>
+    <div class="counter in"><div class="n" id="sE">0</div><div class="l">Entraron</div></div>
+  </div>
+
+  <div class="card hidden" id="linkCard">
+    <h3>Tu link de pago</h3>
+    <p class="hint">Compartilo: lo que se compre por acá queda a tu nombre.</p>
+    <div class="pay-row"><span class="v" id="myLink" style="text-align:left;font-size:13px"></span></div>
+    <div class="row" style="margin-top:10px"><button class="btn sm ghost" id="copyLink">Copiar link</button><a class="btn sm wa" id="waLink" target="_blank">Mandar por WhatsApp</a></div>
+  </div>
+
+  <div id="invBox" class="hidden">
+    <p class="hint" id="cupo" style="margin-bottom:8px"></p>
+    <form class="card form" id="addOne">
+      <h3>Invitar (le llega el QR ya)</h3>
+      <input name="nombre" placeholder="Nombre y apellido" maxlength="80">
+      <input name="email" type="email" placeholder="mail@ejemplo.com" maxlength="120">
+      <input name="telefono" type="tel" placeholder="Teléfono (opcional)" maxlength="30">
+      <button class="btn">Enviar QR</button>
+    </form>
+    <details class="card"><summary class="kicker" style="cursor:pointer">Cargar varios de una</summary>
+      <form class="form" id="addBulk" style="margin-top:10px">
+        <p class="hint">Uno por línea: <b>nombre, mail, teléfono</b> · hasta 60 por tanda</p>
+        <textarea name="lista" placeholder="Camila Ferreira, camila@gmail.com, 099123456"></textarea>
+        <button class="btn">Cargar y enviar QRs</button>
+      </form>
+    </details>
+  </div>
+  <div class="err" id="ierr"></div>
+  <h3 class="kicker" style="margin:6px 0 8px">Mi gente</h3>
+  <div class="list" id="list"></div>
+</div>
+</div>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+let PIN = sessionStorage.getItem('lb_rp_pin') || '', D = null;
+async function login(p) {
+  const r = await api('login', { pin: p });
+  if (r.rol !== 'rrpp') throw new Error(r.rol === 'admin' ? 'Esa es la clave del panel principal: entrá por admin.html' : 'Clave incorrecta');
+  PIN = p; sessionStorage.setItem('lb_rp_pin', p);
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); load();
+}
+$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
+$('#out').onclick = () => { sessionStorage.removeItem('lb_rp_pin'); location.reload(); };
+if (PIN) login(PIN).catch(() => sessionStorage.removeItem('lb_rp_pin'));
+
+function ticketUrl(t) { return (D.siteUrl || '') + 'ticket.html?t=' + t; }
+function waTicket(o) {
+  let tel = String(o.telefono || '').replace(/\D/g, ''); if (tel.startsWith('0')) tel = '598' + tel.slice(1);
+  return 'https://wa.me/' + tel + '?text=' + encodeURIComponent('Hola ' + o.nombre + '! Tu entrada para LA BOMBA (sáb 21/11, Al Fin y al Cabo, Montoya): ' + ticketUrl(o.token) + ' · Mostrá el QR en la puerta.');
+}
+async function load() {
+  try { D = await api('mis', { pin: PIN }); } catch (e) { $('#ierr').textContent = e.message; return; }
+  $('#who').textContent = D.nombre;
+  const s = D.stats; $('#sI').textContent = s.invitados; $('#sV').textContent = s.vendidas; $('#sP').textContent = s.pendientes; $('#sE').textContent = s.entraron;
+  $('#linkCard').classList.toggle('hidden', !D.link);
+  if (D.link) { $('#myLink').textContent = D.link; $('#waLink').href = 'https://wa.me/?text=' + encodeURIComponent('Entradas LA BOMBA · sáb 21/11 · Al Fin y al Cabo, Montoya: ' + D.link); }
+  $('#invBox').classList.toggle('hidden', !D.puedeInvitar);
+  const full = D.tope && s.invitados >= D.tope;
+  $('#cupo').textContent = D.tope ? 'Invitados: ' + s.invitados + ' de ' + D.tope + ' usados' + (full ? ' · llegaste al tope' : '') : '';
+  document.querySelectorAll('#invBox button').forEach(b => b.disabled = !!full);
+  $('#list').innerHTML = D.items.map(o => {
+    const chip = o.usado ? '<span class="chip in">Entró</span>' : o.estado === 'aprobado' ? '<span class="chip">' + (o.tipo === 'pago' ? 'Vendida' : 'Invitado') + '</span>' :
+      o.estado === 'pendiente' ? '<span class="chip wait">Pago pendiente</span>' : '<span class="chip no">' + esc(o.estado) + '</span>';
+    const btns = o.estado === 'aprobado' ? '<div class="row"><button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
+      (o.telefono ? '<a class="btn sm wa" target="_blank" href="' + waTicket(o) + '">WhatsApp</a>' : '') + '<button class="btn sm ghost" data-a="copiar">Copiar link</button></div>' : '';
+    return '<div class="person" data-t="' + esc(o.token) + '"><div class="top"><div class="av">' + esc(initials(o.nombre)) + '</div><div class="info"><b>' + esc(o.nombre) + '</b><small>' +
+      [o.email, o.telefono].filter(Boolean).map(esc).join(' · ') + '</small></div>' + chip + '</div>' + btns + '</div>';
+  }).join('') || '<p class="hint">Todavía no cargaste a nadie.</p>';
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const token = b.closest('.person').dataset.t;
+  if (b.dataset.a === 'copiar') { await navigator.clipboard.writeText(ticketUrl(token)).catch(() => prompt('Copiá el link:', ticketUrl(token))); b.textContent = 'Copiado'; return; }
+  b.disabled = true; b.textContent = '…';
+  try { await api('reenviar', { pin: PIN, token }); b.textContent = 'Enviado'; } catch (x) { alert(x.message + '\nMandalo por WhatsApp.'); b.disabled = false; b.textContent = 'Reenviar mail'; }
+});
+$('#copyLink').onclick = async () => { await navigator.clipboard.writeText(D.link).catch(() => prompt('Copiá el link:', D.link)); $('#copyLink').textContent = 'Copiado'; };
+async function add(list, btn) {
+  $('#ierr').textContent = ''; btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'Enviando…';
+  try {
+    const r = await api('agregar', { pin: PIN, invitados: list });
+    const bad = r.resultados.filter(x => !x.ok || !x.mail);
+    if (bad.length) $('#ierr').textContent = bad.map(x => x.nombre + ': ' + (x.error || 'mail no enviado')).join(' · ');
+    btn.disabled = false; btn.textContent = t0; await load(); return true;
+  } catch (x) { $('#ierr').textContent = x.message; btn.disabled = false; btn.textContent = t0; return false; }
+}
+$('#addOne').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const g = { nombre: f.nombre.value.trim(), email: f.email.value.trim(), telefono: f.telefono.value.trim() };
+  if (!g.nombre || !(g.email || g.telefono)) return $('#ierr').textContent = 'Poné nombre y mail (o teléfono)';
+  if (await add([g], f.querySelector('button'))) f.reset();
+};
+$('#addBulk').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const list = f.lista.value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split(/[,;\t]/).map(s => s.trim());
+    return { nombre: p[0], email: p.find(s => s.includes('@')) || '', telefono: p.slice(1).find(s => /^\+?[\d\s-]{6,}$/.test(s)) || '' };
+  });
+  if (!list.length || !confirm('Cargar ' + list.length + ' invitados y mandarles el QR?')) return;
+  if (await add(list, f.querySelector('button'))) f.reset();
+};
+</script></body></html>

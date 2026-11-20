@@ -24,7 +24,9 @@
 <script>
 let PIN = localStorage.getItem('lb_door_pin') || '', busy = false, last = '', lastAt = 0, scanner = null, cnt = 0;
 async function login(p) {
-  await api('login', { pin: p }); PIN = p; localStorage.setItem('lb_door_pin', p);
+  const r = await api('login', { pin: p });
+  if (r.rol !== 'puerta' && r.rol !== 'admin') throw new Error('Esa clave no es de la puerta');
+  PIN = p; localStorage.setItem('lb_door_pin', p);
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); start();
 }
 $('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };

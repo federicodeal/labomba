@@ -79,7 +79,8 @@ $('#f').onsubmit = async e => {
   const b = $('#send'); b.disabled = true; b.textContent = 'Enviando…';
   try {
     const file = await compress(picked);
-    const r = await api('comprar', { nombre, email, telefono, file });
+    const rp = (new URLSearchParams(location.search).get('rp') || '').trim().toLowerCase();
+    const r = await api('comprar', { nombre, email, telefono, file, rp });
     $('#doneMail').textContent = email;
     $('#ticketLink').href = 'ticket.html?t=' + encodeURIComponent(r.token);
     try { localStorage.setItem('lb_ticket', r.token); } catch (_) {}

@@ -1,0 +1,155 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Panel · LA BOMBA</title><link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page">
+<div id="login" class="card form" style="margin-top:40px;text-align:center">
+  <img src="assets/bomb.svg" style="width:70px;margin:0 auto" alt=""><div class="logo" style="font-size:48px">LA BOMBA</div>
+  <div class="kicker">Panel de organizadores</div>
+  <input id="pin" type="password" inputmode="numeric" placeholder="PIN" style="text-align:center;font-size:22px;letter-spacing:.3em">
+  <div class="err" id="lerr"></div><button class="btn" id="go">Entrar</button>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar"><div class="brand"><img src="assets/bomb.svg" alt=""><span class="logo">LA BOMBA</span></div>
+    <div class="row"><a class="btn sm ghost" href="scanner.html">Escáner</a><button class="btn sm ghost" id="out">Salir</button></div></div>
+  <div class="counters">
+    <div class="counter okc"><div class="n" id="cA">0</div><div class="l">Aprobados</div></div>
+    <div class="counter pend"><div class="n" id="cP">0</div><div class="l">Pendientes</div></div>
+    <div class="counter in"><div class="n" id="cE">0</div><div class="l">Entraron</div></div>
+  </div>
+  <p class="hint" id="quota" style="margin:-4px 0 10px;font-size:12px"></p>
+  <div class="tabs"><button class="tab on" data-t="inv">Invitados directos</button><button class="tab" data-t="pag">Pagos por aprobar<span class="pill hidden" id="pp">0</span></button></div>
+
+  <div id="t-inv">
+    <form class="card form" id="addOne">
+      <h3>Mandar QR ya</h3>
+      <input name="nombre" placeholder="Nombre y apellido" maxlength="80">
+      <input name="email" type="email" placeholder="mail@ejemplo.com" maxlength="120">
+      <input name="telefono" type="tel" placeholder="Teléfono (opcional)" maxlength="30">
+      <button class="btn">Enviar QR al mail</button>
+    </form>
+    <details class="card"><summary class="kicker" style="cursor:pointer">Cargar varios de una</summary>
+      <form class="form" id="addBulk" style="margin-top:10px">
+        <p class="hint">Uno por línea: <b>nombre, mail, teléfono</b> · hasta 60 por tanda</p>
+        <textarea name="lista" placeholder="Camila Ferreira, camila@gmail.com, 099123456&#10;Mateo Álvarez, mateo@gmail.com"></textarea>
+        <button class="btn">Cargar y enviar QRs</button>
+      </form>
+    </details>
+    <div class="err" id="ierr"></div>
+    <input id="q" placeholder="Buscar por nombre o mail…" style="margin-bottom:10px">
+    <div class="list" id="listAll"></div>
+  </div>
+
+  <div id="t-pag" class="hidden"><div class="list" id="listPend"></div></div>
+</div>
+</div>
+<div id="modal" class="modal hidden"></div>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+let PIN = sessionStorage.getItem('lb_pin') || '', DATA = { items: [] };
+async function login(p) {
+  const r = await api('login', { pin: p });
+  if (r.rol !== 'admin') throw new Error('Ese PIN es del escáner, no del panel');
+  PIN = p; sessionStorage.setItem('lb_pin', p);
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); load();
+}
+$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
+$('#out').onclick = () => { sessionStorage.removeItem('lb_pin'); location.reload(); };
+if (PIN) login(PIN).catch(() => sessionStorage.removeItem('lb_pin'));
+
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  $('#t-inv').classList.toggle('hidden', t.dataset.t !== 'inv'); $('#t-pag').classList.toggle('hidden', t.dataset.t !== 'pag');
+});
+
+async function load() {
+  try { DATA = await api('listar', { pin: PIN }); } catch (e) { $('#ierr').textContent = e.message; return; }
+  const c = DATA.contadores;
+  $('#cA').textContent = c.aprobados; $('#cP').textContent = c.pendientes; $('#cE').textContent = c.entraron;
+  $('#pp').textContent = c.pendientes; $('#pp').classList.toggle('hidden', !c.pendientes);
+  $('#quota').textContent = 'Mails que quedan hoy: ' + DATA.mailsRestantes + (DATA.mailsRestantes < 20 ? ' · si se acaban, mandá el QR por WhatsApp' : '');
+  render();
+}
+function ticketUrl(t) { return (DATA.siteUrl || location.href.replace(/admin\.html.*$/, '')) + 'ticket.html?t=' + t; }
+function waLink(o) {
+  let tel = String(o.telefono || '').replace(/\D/g, '');
+  if (tel.startsWith('0')) tel = '598' + tel.slice(1);
+  const msg = 'Hola ' + o.nombre + '! Tu entrada para LA BOMBA (sáb 21/11, Al Fin y al Cabo, Montoya): ' + ticketUrl(o.token) + ' · Mostrá el QR en la puerta.';
+  return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg);
+}
+function chip(o) {
+  if (o.usado) return '<span class="chip in">Entró ' + esc(o.usado.split(' ')[1] || '') + '</span>';
+  if (o.estado === 'aprobado') return '<span class="chip">' + (o.mail ? 'QR enviado' : 'Aprobado') + '</span>';
+  if (o.estado === 'pendiente') return '<span class="chip wait">Pendiente</span>';
+  return '<span class="chip no">' + esc(o.estado) + '</span>';
+}
+function card(o, pend) {
+  const sub = [o.email, o.telefono].filter(Boolean).map(esc).join(' · ');
+  let btns = '';
+  if (pend) btns = (o.comprobante ? '<button class="btn sm ghost" data-a="ver">Ver comprobante</button>' : '') +
+    '<button class="btn sm ok" data-a="aprobar">Aprobar y mandar QR</button><button class="btn sm danger" data-a="rechazar">Rechazar</button>';
+  else if (o.estado === 'aprobado') btns = '<button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
+    (o.telefono ? '<a class="btn sm wa" target="_blank" href="' + waLink(o) + '">WhatsApp</a>' : '') +
+    '<button class="btn sm ghost" data-a="copiar">Copiar link</button>' +
+    (o.usado ? '<button class="btn sm danger" data-a="desmarcar">Desmarcar entrada</button>' : '');
+  else if (o.estado === 'rechazado') btns = '<button class="btn sm ghost" data-a="aprobar">Aprobar igual</button>';
+  return '<div class="person" data-t="' + esc(o.token) + '"><div class="top"><div class="av">' + esc(initials(o.nombre)) + '</div>' +
+    '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? 'Pagó · ' : 'Invitado · ') + esc(o.creado) + '</small></div>' + chip(o) + '</div>' +
+    '<div class="row">' + btns + '</div></div>';
+}
+function render() {
+  const q = $('#q').value.trim().toLowerCase();
+  const all = DATA.items.filter(o => o.estado !== 'pendiente' && (!q || (o.nombre + ' ' + o.email).toLowerCase().includes(q)));
+  $('#listAll').innerHTML = all.map(o => card(o, false)).join('') || '<p class="hint">Todavía no hay entradas.</p>';
+  const p = DATA.items.filter(o => o.estado === 'pendiente');
+  $('#listPend').innerHTML = p.map(o => card(o, true)).join('') || '<p class="hint">No hay pagos pendientes 🎉</p>';
+}
+$('#q').oninput = render;
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const token = b.closest('.person').dataset.t, a = b.dataset.a, o = DATA.items.find(x => x.token === token);
+  if (a === 'copiar') { await navigator.clipboard.writeText(ticketUrl(token)).catch(() => prompt('Copiá el link:', ticketUrl(token))); b.textContent = 'Copiado'; return; }
+  if (a === 'rechazar' && !confirm('¿Rechazar el pago de ' + o.nombre + '?')) return;
+  if (a === 'desmarcar' && !confirm('¿Marcar que ' + o.nombre + ' todavía no entró?')) return;
+  b.disabled = true; const t0 = b.textContent; b.textContent = '…';
+  try {
+    if (a === 'ver') { showReceipt(await api('comprobante', { pin: PIN, token })); b.disabled = false; b.textContent = t0; return; }
+    const r = await api(a, { pin: PIN, token });
+    if ((a === 'aprobar' || a === 'reenviar') && r.mail === false || r.error) alert('Aprobado, pero el mail no salió: ' + (r.error || '') + '\nMandale el link por WhatsApp.');
+    await load();
+  } catch (x) { alert(x.message); b.disabled = false; b.textContent = t0; }
+});
+function showReceipt(r) {
+  const m = $('#modal'), src = 'data:' + r.mime + ';base64,' + r.data;
+  m.innerHTML = r.mime === 'application/pdf' ? '<iframe src="' + src + '"></iframe>' : '<img src="' + src + '" alt="Comprobante">';
+  m.classList.remove('hidden'); m.onclick = () => m.classList.add('hidden');
+}
+async function add(list, btn) {
+  $('#ierr').textContent = ''; btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'Enviando…';
+  try {
+    const r = await api('agregar', { pin: PIN, invitados: list });
+    const bad = r.resultados.filter(x => !x.ok || !x.mail);
+    if (bad.length) $('#ierr').textContent = bad.map(x => x.nombre + ': ' + (x.error || 'mail no enviado')).join(' · ');
+    await load(); return true;
+  } catch (x) { $('#ierr').textContent = x.message; return false; }
+  finally { btn.disabled = false; btn.textContent = t0; }
+}
+$('#addOne').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const g = { nombre: f.nombre.value.trim(), email: f.email.value.trim(), telefono: f.telefono.value.trim() };
+  if (!g.nombre || !(g.email || g.telefono)) return $('#ierr').textContent = 'Poné nombre y mail (o teléfono)';
+  if (await add([g], f.querySelector('button'))) f.reset();
+};
+$('#addBulk').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const list = f.lista.value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split(/[,;\t]/).map(s => s.trim());
+    const email = p.find(s => s.includes('@')) || '', tel = p.slice(1).find(s => /^\+?[\d\s-]{6,}$/.test(s)) || '';
+    return { nombre: p[0], email, telefono: tel };
+  });
+  if (!list.length) return;
+  if (!confirm('Cargar ' + list.length + ' invitados y mandarles el QR?')) return;
+  if (await add(list, f.querySelector('button'))) f.reset();
+};
+</script></body></html>

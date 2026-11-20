@@ -1,0 +1,90 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LA BOMBA · Entradas</title><meta name="description" content="La Bomba · Laura & Pablo · Sáb 21 nov · Al Fin y al Cabo, Montoya">
+<meta property="og:title" content="LA BOMBA · Laura & Pablo"><meta property="og:image" content="assets/flyer.jpg">
+<link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page">
+<div class="hero">
+  <img class="flyer" src="assets/flyer.jpg" alt="Flyer La Bomba" onerror="this.outerHTML='<img class=bomb src=assets/bomb.svg alt=&quot;&quot;><div class=&quot;logo&quot;>LA BOMBA</div>'">
+</div>
+<div class="hosts" style="text-align:center">Laura &amp; Pablo</div>
+<div class="meta">
+  <div><span>Cuándo</span><b>Sáb 21 de noviembre</b></div>
+  <div><span>Dónde</span><b>Al Fin y al Cabo</b><span>Montoya</span></div>
+  <div><span>Guest list</span><b>21 hs</b></div>
+  <div><span>Puertas</span><b>00 hs</b></div>
+  <div class="full"><span>DJ Danu · DJ Mickyta</span></div>
+</div>
+<div class="price"><span class="n" id="precio">$ 2.000</span><span class="tag">entrada</span></div>
+
+<div id="buy">
+<div class="card">
+  <h3>Cómo pagar</h3>
+  <p>Transferí <b id="precio2">$ 2.000</b> a la cuenta Prex de abajo, subí el comprobante y cuando lo confirmemos te llega tu <b>QR por mail</b>.</p>
+  <div class="pay-row"><span class="k">Prex</span><span class="v" id="prexNum"></span></div>
+  <div class="pay-row"><span class="k">Titular</span><span class="v" id="prexTit"></span></div>
+  <div class="pay-row"><span class="k">Monto</span><span class="v" id="precio3">$ 2.000</span></div>
+  <div class="pay-row"><span class="k">Concepto</span><span class="v">Tu nombre y apellido</span></div>
+</div>
+<form class="card form" id="f" novalidate>
+  <h3>Mandanos tu comprobante</h3>
+  <label class="fld"><span>Nombre y apellido</span><input name="nombre" required autocomplete="name" maxlength="80"></label>
+  <label class="fld"><span>Mail (ahí te llega el QR)</span><input name="email" type="email" required autocomplete="email" maxlength="120"></label>
+  <label class="fld"><span>Teléfono</span><input name="telefono" type="tel" autocomplete="tel" maxlength="30" placeholder="09X XXX XXX"></label>
+  <label class="upload" for="file"><div class="ico">⬆</div><div><b id="fileLbl">Subí la foto del comprobante</b><em>Imagen o PDF · máx 5 MB</em></div></label>
+  <input id="file" type="file" accept="image/*,application/pdf" class="hidden">
+  <div class="err" id="err"></div>
+  <button class="btn" id="send">Enviar comprobante</button>
+</form>
+</div>
+
+<div id="done" class="hidden">
+  <div class="ok-block"><div class="badge">✓</div><h2>Recibimos tu comprobante</h2>
+  <p class="hint">Cuando confirmemos el pago te llega el QR a <b id="doneMail"></b>. Revisá también en spam.</p></div>
+  <div class="card"><p class="hint">Guardá este link: ahí vas a ver tu QR apenas esté aprobado.</p>
+  <a class="btn ghost" id="ticketLink" style="margin-top:10px">Ver mi entrada</a></div>
+</div>
+</div>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+const C = window.LB_CONFIG;
+$('#prexNum').textContent = C.PREX_NUMERO; $('#prexTit').textContent = C.PREX_TITULAR;
+['#precio','#precio2','#precio3'].forEach(s => $(s).textContent = C.PRECIO);
+let picked = null;
+$('#file').onchange = e => { picked = e.target.files[0] || null; $('#fileLbl').textContent = picked ? picked.name : 'Subí la foto del comprobante'; };
+
+function readDataURL(blob) { return new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob); }); }
+async function compress(file) {
+  if (file.type === 'application/pdf') {
+    if (file.size > 5 * 1024 * 1024) throw new Error('El PDF pesa más de 5 MB');
+    return { mime: 'application/pdf', data: await readDataURL(file) };
+  }
+  try {
+    const bmp = await createImageBitmap(file);
+    const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    return { mime: 'image/jpeg', data: cv.toDataURL('image/jpeg', 0.8) };
+  } catch (e) {
+    if (file.size > 5 * 1024 * 1024) throw new Error('La imagen pesa más de 5 MB');
+    const mime = /^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) ? file.type : 'image/jpeg';
+    return { mime, data: await readDataURL(file) };
+  }
+}
+$('#f').onsubmit = async e => {
+  e.preventDefault(); const f = e.target, err = $('#err'); err.textContent = '';
+  const nombre = f.nombre.value.trim(), email = f.email.value.trim(), telefono = f.telefono.value.trim();
+  if (!nombre) return err.textContent = 'Poné tu nombre y apellido';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err.textContent = 'Revisá el mail';
+  if (!picked) return err.textContent = 'Falta subir el comprobante';
+  const b = $('#send'); b.disabled = true; b.textContent = 'Enviando…';
+  try {
+    const file = await compress(picked);
+    const r = await api('comprar', { nombre, email, telefono, file });
+    $('#doneMail').textContent = email;
+    $('#ticketLink').href = 'ticket.html?t=' + encodeURIComponent(r.token);
+    try { localStorage.setItem('lb_ticket', r.token); } catch (_) {}
+    $('#buy').classList.add('hidden'); $('#done').classList.remove('hidden'); scrollTo(0, 0);
+  } catch (x) { err.textContent = x.message; }
+  b.disabled = false; b.textContent = 'Enviar comprobante';
+};
+</script></body></html>

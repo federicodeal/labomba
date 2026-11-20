@@ -1,0 +1,30 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi entrada · LA BOMBA</title><link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page" style="text-align:center">
+<div class="hero"><img class="bomb" src="assets/bomb.svg" alt=""><div class="logo">LA BOMBA</div><div class="hosts">Laura &amp; Pablo</div></div>
+<div class="meta"><div><span>Cuándo</span><b>Sáb 21 nov</b></div><div><span>Dónde</span><b>Al Fin y al Cabo</b><span>Montoya</span></div>
+<div><span>Guest list</span><b>21 hs</b></div><div><span>Puertas</span><b>00 hs</b></div></div>
+<div class="card" id="box"><p class="hint">Cargando tu entrada…</p></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+(async () => {
+  const t = new URLSearchParams(location.search).get('t') || (localStorage.getItem('lb_ticket') || '');
+  const box = $('#box');
+  if (!t) { box.innerHTML = '<p class="hint">No encontramos tu entrada. Usá el link que te llegó por mail.</p>'; return; }
+  try {
+    const r = await api('ticket', { token: t });
+    if (r.estado === 'aprobado') {
+      box.innerHTML = '<div class="kicker">Hola</div><h3 style="font-size:24px">' + esc(r.nombre) + '</h3><div class="qrbox" id="qr"></div>' +
+        '<div class="kicker" style="margin-top:8px">Mostralo en la puerta</div>' +
+        (r.usado ? '<p class="hint" style="margin-top:8px">Entrada usada a las ' + esc(r.usado) + '</p>' : '<p class="hint" style="margin-top:8px">QR personal. Se marca como usado la primera vez que se escanea.</p>');
+      new QRCode($('#qr'), { text: t, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+    } else if (r.estado === 'pendiente') {
+      box.innerHTML = '<h3>' + esc(r.nombre) + '</h3><p class="hint">Tu pago está <b>pendiente de confirmación</b>. Cuando lo aprobemos, en esta misma página aparece tu QR (y te llega por mail).</p>';
+    } else {
+      box.innerHTML = '<h3>' + esc(r.nombre) + '</h3><p class="hint">Tu comprobante no fue aprobado. Escribile a los organizadores.</p>';
+    }
+  } catch (x) { box.innerHTML = '<p class="hint">' + esc(x.message) + '</p>'; }
+})();
+</script></body></html>

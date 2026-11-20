@@ -1,0 +1,66 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="robots" content="noindex"><meta name="theme-color" content="#070809"><title>Puerta · LA BOMBA</title>
+<link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page">
+<div id="login" class="card form" style="margin-top:40px;text-align:center">
+  <img src="assets/bomb.svg" style="width:70px;margin:0 auto" alt=""><div class="logo" style="font-size:48px">LA BOMBA</div>
+  <div class="kicker">Escáner de puerta</div>
+  <input id="pin" type="password" inputmode="numeric" placeholder="PIN" style="text-align:center;font-size:22px;letter-spacing:.3em">
+  <div class="err" id="lerr"></div><button class="btn" id="go">Entrar</button>
+</div>
+<div id="app" class="hidden">
+  <div class="topbar"><div class="brand"><img src="assets/bomb.svg" alt=""><span class="logo">LA BOMBA</span></div><span class="kicker">Puerta</span></div>
+  <div id="reader"></div>
+  <p class="hint" style="text-align:center;margin:10px 0" id="st">Apuntá al QR de la entrada</p>
+  <div class="card form"><h3>¿No lee el QR?</h3>
+    <input id="code" placeholder="Pegá o escribí el código (LB…)" autocapitalize="off" autocomplete="off">
+    <button class="btn ghost" id="manual">Validar código</button></div>
+  <p class="hint" style="text-align:center;font-size:12px">Entradas validadas en este teléfono: <b id="cnt">0</b></p>
+</div>
+</div>
+<div id="res" class="result hidden"></div>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+let PIN = localStorage.getItem('lb_door_pin') || '', busy = false, last = '', lastAt = 0, scanner = null, cnt = 0;
+async function login(p) {
+  await api('login', { pin: p }); PIN = p; localStorage.setItem('lb_door_pin', p);
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); start();
+}
+$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
+if (PIN) login(PIN).catch(() => localStorage.removeItem('lb_door_pin'));
+
+function start() {
+  scanner = new Html5Qrcode('reader');
+  scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, onCode, () => {})
+    .catch(e => $('#st').textContent = 'No pude abrir la cámara (' + e + '). Dale permiso a la cámara o usá el código manual.');
+}
+function onCode(text) {
+  const now = Date.now();
+  if (busy || (text === last && now - lastAt < 4000)) return; // evita doble lectura del mismo QR
+  last = text; lastAt = now; check(text);
+}
+$('#manual').onclick = () => { const v = $('#code').value.trim(); if (v) check(v); };
+
+async function check(code) {
+  busy = true; $('#st').textContent = 'Validando…';
+  try { show(await api('escanear', { pin: PIN, code })); }
+  catch (e) { show({ resultado: 'error', motivo: e.message }); }
+}
+function show(r) {
+  const el = $('#res'); el.className = 'result ' + (r.resultado === 'error' ? 'invalido' : r.resultado);
+  let h;
+  if (r.resultado === 'valido') { h = '<div class="big">✓<br>VÁLIDO</div><div class="name">' + esc(r.nombre) + '</div><div class="sub">Marcado como utilizado · ' + esc(r.hora) + '</div>'; cnt++; $('#cnt').textContent = cnt; beep(880, .15); vib([80]); }
+  else if (r.resultado === 'usado') { h = '<div class="big">✕<br>YA<br>UTILIZADO</div><div class="name">' + esc(r.nombre) + '</div><div class="sub">Entró por primera vez a las ' + esc(r.hora) + '</div>'; beep(220, .5); vib([200, 100, 200]); }
+  else if (r.resultado === 'invalido') { h = '<div class="big">!<br>QR NO<br>VÁLIDO</div>' + (r.nombre ? '<div class="name">' + esc(r.nombre) + '</div>' : '') + '<div class="sub">' + esc(r.motivo || 'Este código no es una entrada de La Bomba') + '</div>'; beep(220, .5); vib([200, 100, 200]); }
+  else { h = '<div class="big" style="font-size:56px">SIN<br>CONEXIÓN</div><div class="sub">' + esc(r.motivo) + '</div><div class="sub">Probá de nuevo</div>'; }
+  el.innerHTML = h + '<div class="tap">Tocá para escanear el siguiente</div>';
+  el.classList.remove('hidden'); $('#st').textContent = 'Apuntá al QR de la entrada';
+  clearTimeout(window._t); window._t = setTimeout(close, r.resultado === 'valido' ? 3500 : 8000);
+}
+function close() { $('#res').classList.add('hidden'); busy = false; $('#code').value = ''; }
+$('#res').onclick = close;
+let actx; function beep(f, d) { try { actx = actx || new AudioContext(); const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + d); } catch (_) {} }
+function vib(p) { if (navigator.vibrate) navigator.vibrate(p); }
+</script></body></html>

@@ -96,7 +96,7 @@ function ticketUrl(t) { return (DATA.siteUrl || location.href.replace(/admin\.ht
 function waLink(o) {
   let tel = String(o.telefono || '').replace(/\D/g, '');
   if (tel.startsWith('0')) tel = '598' + tel.slice(1);
-  const msg = 'Hola ' + o.nombre + '! Tu entrada para LA BOMBA (sáb 21/11, Al Fin y al Cabo, Montoya): ' + ticketUrl(o.token) + ' · Mostrá el QR en la puerta.';
+  const msg = '¡Hola ' + o.nombre + '! 💣 Estás en la lista de LA BOMBA hoy en Al Fin y al Cabo (Montoya). Lista desde las 21 hs, puerta a las 00 hs. Tu entrada con QR está acá: ' + ticketUrl(o.token) + ' ¡Nos vemos en la pista!';
   return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg);
 }
 function chip(o) {

@@ -34,8 +34,9 @@ $('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
 if (PIN) login(PIN).catch(() => localStorage.removeItem('lb_door_pin'));
 
 function start() {
-  scanner = new Html5Qrcode('reader');
-  scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, onCode, () => {})
+  scanner = new Html5Qrcode('reader', { verbose: false, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+  const box = (w, h) => { const s = Math.max(200, Math.floor(Math.min(w, h) * 0.85)); return { width: s, height: s }; };
+  scanner.start({ facingMode: 'environment' }, { fps: 15, qrbox: box, disableFlip: false }, onCode, () => {})
     .catch(e => $('#st').textContent = 'No pude abrir la cámara (' + e + '). Dale permiso a la cámara o usá el código manual.');
 }
 function onCode(text) {

@@ -99,16 +99,22 @@ function chip(o) {
   if (o.estado === 'pendiente') return '<span class="chip wait">Pendiente</span>';
   return '<span class="chip no">' + esc(o.estado) + '</span>';
 }
+function recTok(o) {
+  if (o.comprobante) return o.token;
+  const b = o.compra && DATA.items.find(x => x.compra === o.compra && x.comprobante);
+  return b ? b.token : '';
+}
 function card(o, pend) {
+  const rt = recTok(o), verBtn = rt ? '<button class="btn sm ghost" data-a="ver" data-r="' + esc(rt) + '">Ver comprobante</button>' : '';
   const sub = [o.email, o.telefono].filter(Boolean).map(esc).join(' · ');
   let btns = '';
   if (pend) btns = (o.comprobante ? '<button class="btn sm ghost" data-a="ver">Ver comprobante</button>' : '') +
     '<button class="btn sm ok" data-a="aprobar">Aprobar y mandar QR</button><button class="btn sm danger" data-a="rechazar">Rechazar</button>';
-  else if (o.estado === 'aprobado') btns = '<button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
+  else if (o.estado === 'aprobado') btns = verBtn + '<button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
     (o.telefono ? '<a class="btn sm wa" target="_blank" href="' + waLink(o) + '">WhatsApp</a>' : '') +
     '<button class="btn sm ghost" data-a="copiar">Copiar link</button>' +
     (o.usado ? '<button class="btn sm danger" data-a="desmarcar">Desmarcar entrada</button>' : '');
-  else if (o.estado === 'rechazado') btns = '<button class="btn sm ghost" data-a="aprobar">Aprobar igual</button>';
+  else if (o.estado === 'rechazado') btns = verBtn + '<button class="btn sm ghost" data-a="aprobar">Aprobar igual</button>';
   btns += '<button class="btn sm danger" data-a="borrar" title="Borrar entrada">🗑</button>';
   return '<div class="person" data-t="' + esc(o.token) + '"><div class="top"><div class="av">' + esc(initials(o.nombre)) + '</div>' +
     '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? 'Pagó · ' : 'Invitado · ') + esc(o.creado) + (o.aprobadoPor && o.aprobadoPor.indexOf('rrpp:') === 0 && o.estado === 'aprobado' ? ' · aprobó el RRPP' : '') + (o.rrpp ? ' · RRPP <b style="display:inline;font-size:12px;color:var(--red2)">' + esc(o.rrppNombre || o.rrpp) + '</b>' : '') + '</small></div>' + chip(o) + '</div>' +
@@ -197,7 +203,7 @@ document.addEventListener('click', async e => {
   if (a === 'desmarcar' && !confirm('¿Marcar que ' + o.nombre + ' todavía no entró?')) return;
   b.disabled = true; const t0 = b.textContent; b.textContent = '…';
   try {
-    if (a === 'ver') { showReceipt(await api('comprobante', { pin: PIN, token })); b.disabled = false; b.textContent = t0; return; }
+    if (a === 'ver') { showReceipt(await api('comprobante', { pin: PIN, token: b.dataset.r || token })); b.disabled = false; b.textContent = t0; return; }
     const r = await api(a, { pin: PIN, token });
     if ((a === 'aprobar' || a === 'reenviar') && r.mail === false || r.error) alert('Aprobado, pero el mail no salió: ' + (r.error || '') + '\nMandale el link por WhatsApp.');
     await load();

@@ -19,7 +19,7 @@
 <div id="buy">
 <div class="card">
   <h3>Cómo pagar</h3>
-  <p>Transferí <b id="precio2">$ 2.000</b> por entrada a la cuenta Prex de abajo, subí el comprobante y cuando lo confirmemos te llega tu <b>QR por mail</b>.</p>
+  <p>Transferí <b id="precio2">$ 2.000</b> a la cuenta Prex de abajo, subí el comprobante y cuando lo confirmemos te llega tu <b>QR por mail</b>.</p>
   <div class="pay-row"><span class="k">Prex</span><span class="v" id="prexNum"></span></div>
   <div class="pay-row"><span class="k">Titular</span><span class="v" id="prexTit"></span></div>
   <div class="pay-row"><span class="k">Monto</span><span class="v" id="precio3">$ 2.000</span></div>
@@ -30,9 +30,6 @@
   <label class="fld"><span>Nombre y apellido</span><input name="nombre" required autocomplete="name" maxlength="80"></label>
   <label class="fld"><span>Mail (ahí te llega el QR)</span><input name="email" type="email" required autocomplete="email" maxlength="120"></label>
   <label class="fld"><span>Teléfono</span><input name="telefono" type="tel" autocomplete="tel" maxlength="30" placeholder="09X XXX XXX"></label>
-  <label class="fld"><span>Cantidad de entradas</span></label>
-  <div class="qty"><button type="button" id="menos">−</button><b id="cant">1</b><button type="button" id="mas">+</button><span class="total" id="total">Total $ 2.000</span></div>
-  <div id="comps" class="form"></div>
   <label class="upload" for="file"><div class="ico">⬆</div><div><b id="fileLbl">Subí la foto del comprobante</b><em>Imagen o PDF · máx 5 MB</em></div></label>
   <input id="file" type="file" accept="image/*,application/pdf" class="hidden">
   <div class="err" id="err"></div>
@@ -52,21 +49,6 @@
 const C = window.LB_CONFIG;
 $('#prexNum').textContent = C.PREX_NUMERO; $('#prexTit').textContent = C.PREX_TITULAR;
 ['#precio','#precio2','#precio3'].forEach(s => $(s).textContent = C.PRECIO);
-const PN = C.PRECIO_NUM || 2000, MAXE = C.MAX_ENTRADAS || 10;
-let cant = 1;
-const money = n => '$ ' + n.toLocaleString('es-UY');
-function setCant(n) {
-  const prev = [...document.querySelectorAll('#comps .comp')].map(d => ({ n: d.querySelector('[name=cn]').value, e: d.querySelector('[name=ce]').value }));
-  cant = Math.max(1, Math.min(MAXE, n));
-  $('#cant').textContent = cant; $('#total').textContent = 'Total ' + money(cant * PN); $('#precio3').textContent = money(cant * PN);
-  let h = '';
-  for (let k = 2; k <= cant; k++) h += '<div class="comp"><span class="kicker">Entrada ' + k + ' (opcional)</span>' +
-    '<input name="cn" placeholder="Nombre del acompañante" maxlength="80"><input name="ce" type="email" placeholder="Su mail (si no, le llega a tu mail)" maxlength="120"></div>';
-  $('#comps').innerHTML = h;
-  [...document.querySelectorAll('#comps .comp')].forEach((d, i) => { if (prev[i]) { d.querySelector('[name=cn]').value = prev[i].n; d.querySelector('[name=ce]').value = prev[i].e; } });
-}
-$('#menos').onclick = () => setCant(cant - 1); $('#mas').onclick = () => setCant(cant + 1);
-setCant(1);
 let picked = null;
 $('#file').onchange = e => { picked = e.target.files[0] || null; $('#fileLbl').textContent = picked ? picked.name : 'Subí la foto del comprobante'; };
 
@@ -94,15 +76,12 @@ $('#f').onsubmit = async e => {
   if (!nombre) return err.textContent = 'Poné tu nombre y apellido';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err.textContent = 'Revisá el mail';
   if (!picked) return err.textContent = 'Falta subir el comprobante';
-  const acompanantes = [...document.querySelectorAll('#comps .comp')].map(d => ({ nombre: d.querySelector('[name=cn]').value.trim(), email: d.querySelector('[name=ce]').value.trim() }));
-  const badMail = acompanantes.findIndex(a => a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email));
-  if (badMail >= 0) return err.textContent = 'Revisá el mail de la entrada ' + (badMail + 2);
   const b = $('#send'); b.disabled = true; b.textContent = 'Enviando…';
   try {
     const file = await compress(picked);
     const rp = (new URLSearchParams(location.search).get('rp') || '').trim().toLowerCase();
-    const r = await api('comprar', { nombre, email, telefono, file, rp, cantidad: cant, acompanantes });
-    $('#doneMail').textContent = email + (cant > 1 ? ' (las ' + cant + ' entradas; a los acompañantes con mail propio les llega el suyo)' : '');
+    const r = await api('comprar', { nombre, email, telefono, file, rp });
+    $('#doneMail').textContent = email;
     $('#ticketLink').href = 'ticket.html?t=' + encodeURIComponent(r.token);
     try { localStorage.setItem('lb_ticket', r.token); } catch (_) {}
     $('#buy').classList.add('hidden'); $('#done').classList.remove('hidden'); scrollTo(0, 0);

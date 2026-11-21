@@ -119,8 +119,23 @@ function render() {
   const all = DATA.items.filter(o => o.estado !== 'pendiente' && (!q || (o.nombre + ' ' + o.email).toLowerCase().includes(q)));
   $('#listAll').innerHTML = all.map(o => card(o, false)).join('') || '<p class="hint">Todavía no hay entradas.</p>';
   const p = DATA.items.filter(o => o.estado === 'pendiente');
-  $('#listPend').innerHTML = p.map(o => card(o, true)).join('') || '<p class="hint">No hay pagos pendientes 🎉</p>';
+  const groups = {}, order = [];
+  p.slice().reverse().forEach(o => { const k = o.compra || o.token; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(o); });
+  $('#pp').textContent = order.length; $('#pp').classList.toggle('hidden', !order.length);
+  $('#listPend').innerHTML = order.reverse().map(k => groupCard(groups[k])).join('') || '<p class="hint">No hay pagos pendientes 🎉</p>';
   renderRp();
+}
+function groupCard(g) {
+  if (g.length === 1) return card(g[0], true);
+  const buyer = g.find(o => o.nota === 'comprador') || g[0], PN = (window.LB_CONFIG.PRECIO_NUM || 2000);
+  const total = '$ ' + (g.length * PN).toLocaleString('es-UY');
+  const names = g.map(o => esc(o.nombre) + (o.email && o.email !== buyer.email ? ' <span style="color:var(--muted)">(' + esc(o.email) + ')</span>' : '')).join('<br>');
+  return '<div class="person" data-t="' + esc(buyer.token) + '"><div class="top"><div class="av">' + g.length + '</div>' +
+    '<div class="info"><b>' + esc(buyer.nombre) + ' · ' + g.length + ' entradas · ' + total + '</b><small>' + [buyer.email, buyer.telefono].filter(Boolean).map(esc).join(' · ') + '</small>' +
+    '<small>Pagó · ' + esc(buyer.creado) + (buyer.rrpp ? ' · RRPP <b style="display:inline;font-size:12px;color:var(--red2)">' + esc(buyer.rrppNombre || buyer.rrpp) + '</b>' : '') + '</small>' +
+    '<small style="margin-top:4px;color:#C9D4D6">' + names + '</small></div><span class="chip wait">Pendiente</span></div>' +
+    '<div class="row">' + (buyer.comprobante ? '<button class="btn sm ghost" data-a="ver">Ver comprobante</button>' : '') +
+    '<button class="btn sm ok" data-a="aprobar">Aprobar las ' + g.length + ' y mandar QRs</button><button class="btn sm danger" data-a="rechazar">Rechazar</button></div></div>';
 }
 function rpPerms(x) {
   const c = [];

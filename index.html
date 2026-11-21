@@ -14,7 +14,8 @@
   <div><span>Puertas</span><b>00 hs</b></div>
   <div class="full"><span>DJ Danu · DJ Mickyta</span></div>
 </div>
-<div class="price"><span class="n" id="precio">$ 2.000</span><span class="tag">entrada</span></div>
+<div class="price"><span class="n" id="precio">$ 500</span><span class="tag">entrada</span></div>
+<div class="card" id="tramos" style="text-align:center"></div>
 
 <div id="buy">
 <div class="card">
@@ -40,6 +41,8 @@
 </form>
 </div>
 
+<div class="card" id="barra"><h3>Barra</h3></div>
+
 <div id="done" class="hidden">
   <div class="ok-block"><div class="badge">✓</div><h2>Recibimos tu comprobante</h2>
   <p class="hint">Cuando confirmemos el pago te llega el QR a <b id="doneMail"></b>. Revisá también en spam.</p></div>
@@ -51,11 +54,17 @@
 <script>
 const C = window.LB_CONFIG;
 $('#prexNum').textContent = C.PREX_NUMERO; $('#prexTit').textContent = C.PREX_TITULAR;
-['#precio','#precio2','#precio3'].forEach(s => $(s).textContent = C.PRECIO);
 let PN = C.PRECIO_NUM || 2000; const MAXE = C.MAX_ENTRADAS || 10;
 let cant = 1;
 const money = n => '$ ' + n.toLocaleString('es-UY');
-api('config', {}).then(r => { if (r.precio > 0) { PN = r.precio; ['#precio','#precio2'].forEach(s => $(s).textContent = money(PN)); setCant(cant); } }).catch(() => {});
+function tramoActual() { const now = Date.now(), T = C.PRECIOS || []; return T.find(t => !t.hasta || now < Date.parse(t.hasta)) || { precio: PN }; }
+function aplicarPrecio() {
+  const t = tramoActual(); PN = t.precio; ['#precio','#precio2'].forEach(s => $(s).textContent = money(PN));
+  $('#tramos').innerHTML = '<span class="kicker">Precio de la entrada</span>' + (C.PRECIOS || []).map(x => '<div class="pay-row" style="' + (x === t ? 'outline:1px solid var(--red)' : 'opacity:.6') + '"><span class="k">' + x.txt + '</span><span class="v">' + money(x.precio) + (x === t ? ' · ahora' : '') + '</span></div>').join('');
+  if (typeof cant !== 'undefined') setCant(cant);
+}
+$('#barra').innerHTML += (C.BARRA || []).map(([n, p]) => '<div class="pay-row"><span class="k">' + n + '</span><span class="v">' + money(p) + '</span></div>').join('');
+aplicarPrecio(); setInterval(aplicarPrecio, 30000);
 function setCant(n) {
   const prev = [...document.querySelectorAll('#comps .comp')].map(d => ({ n: d.querySelector('[name=cn]').value, e: d.querySelector('[name=ce]').value }));
   cant = Math.max(1, Math.min(MAXE, n));

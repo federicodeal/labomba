@@ -17,7 +17,7 @@
     <div class="counter in"><div class="n" id="cE">0</div><div class="l">Entraron</div></div>
   </div>
   <p class="hint" id="quota" style="margin:-4px 0 10px;font-size:12px"></p>
-  <form class="card form row" id="precioF" style="align-items:center;gap:8px;margin-bottom:10px"><span class="kicker" style="white-space:nowrap">Precio entrada $</span><input name="p" type="number" min="1" step="1" inputmode="numeric" style="flex:1"><button class="btn sm">Guardar</button></form>
+  <p class="hint" id="precioInfo" style="margin:-4px 0 10px;font-size:12px"></p>
   <div class="tabs" style="grid-template-columns:1fr 1fr .7fr"><button class="tab on" data-t="inv">Invitados</button><button class="tab" data-t="pag">Pagos<span class="pill hidden" id="pp">0</span></button><button class="tab" data-t="rp">RRPP</button></div>
 
   <div id="t-inv">
@@ -81,13 +81,8 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   ['inv', 'pag', 'rp'].forEach(k => $('#t-' + k).classList.toggle('hidden', t.dataset.t !== k));
 });
 
-api('config', {}).then(r => { $('#precioF').p.value = r.precio || (window.LB_CONFIG && LB_CONFIG.PRECIO_NUM) || ''; }).catch(() => {});
-$('#precioF').onsubmit = async e => {
-  e.preventDefault(); const f = e.target, b = f.querySelector('button'), v = Math.round(Number(f.p.value));
-  if (!(v > 0)) return alert('Poné un precio válido');
-  if (!confirm('¿Cambiar el precio de la entrada a $ ' + v.toLocaleString('es-UY') + '? Se ve al instante en la página de compra.')) return;
-  b.disabled = true; try { const r = await api('precio_set', { pin: PIN, precio: v }); f.p.value = r.precio; b.textContent = 'Guardado'; setTimeout(() => b.textContent = 'Guardar', 2000); } catch (x) { alert(x.message); } b.disabled = false;
-};
+(function () { const C = window.LB_CONFIG || {}, now = Date.now(), T = C.PRECIOS || [], t = T.find(x => !x.hasta || now < Date.parse(x.hasta));
+  if (t) $('#precioInfo').textContent = 'Precio ahora: $ ' + t.precio.toLocaleString('es-UY') + ' · ' + T.map(x => '$' + x.precio + ' ' + x.txt).join(' · '); })();
 async function load() {
   try { DATA = await api('listar', { pin: PIN }); } catch (e) { $('#ierr').textContent = e.message; return; }
   const c = DATA.contadores;

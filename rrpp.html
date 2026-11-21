@@ -97,8 +97,8 @@ async function load() {
   pend.forEach(o => { const k = o.compra || o.token; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(o); });
   $('#pagBox').classList.toggle('hidden', !order.length); $('#pp').textContent = order.length;
   $('#pend').innerHTML = order.map(k => payCard(groups[k])).join('');
-  $('#list').innerHTML = D.items.filter(o => o.estado !== 'pendiente').map(o => {
-    const chip = o.usado ? '<span class="chip in">Entró</span>' : o.estado === 'aprobado' ? '<span class="chip">' + (o.tipo === 'pago' ? 'Vendida' : 'Invitado') + '</span>' :
+  $('#list').innerHTML = D.items.filter(o => o.estado !== 'pendiente' && o.estado !== 'sin pagar').map(o => {
+    const chip = o.usado ? '<span class="chip in">Entró</span>' : o.estado === 'aprobado' ? '<span class="chip">' + (o.tipo === 'pago' ? (o.metodo === 'mp' ? 'Vendida MP' : 'Vendida') : 'Invitado') + '</span>' :
       o.estado === 'pendiente' ? '<span class="chip wait">Pago pendiente</span>' : '<span class="chip no">' + esc(o.estado) + '</span>';
     const btns = o.estado === 'aprobado' ? '<div class="row"><button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
       (o.telefono ? '<a class="btn sm wa" target="_blank" href="' + waTicket(o) + '">WhatsApp</a>' : '') + '<button class="btn sm ghost" data-a="copiar">Copiar link</button></div>' : '';

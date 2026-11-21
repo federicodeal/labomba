@@ -18,26 +18,30 @@
 <div class="card" id="tramos" style="text-align:center"></div>
 
 <div id="buy">
-<div class="card">
-  <h3>Cómo pagar</h3>
-  <p>Transferí <b id="precio2">$ 2.000</b> por entrada a la cuenta Prex de abajo, subí el comprobante y cuando lo confirmemos te llega tu <b>QR por mail</b>.</p>
-  <div class="pay-row"><span class="k">Prex</span><span class="v" id="prexNum"></span></div>
-  <div class="pay-row"><span class="k">Titular</span><span class="v" id="prexTit"></span></div>
-  <div class="pay-row"><span class="k">Monto</span><span class="v" id="precio3">$ 2.000</span></div>
-  <div class="pay-row"><span class="k">Concepto</span><span class="v">Tu nombre y apellido</span></div>
-</div>
 <form class="card form" id="f" novalidate>
-  <h3>Mandanos tu comprobante</h3>
+  <h3>Comprá tu entrada</h3>
   <label class="fld"><span>Nombre y apellido</span><input name="nombre" required autocomplete="name" maxlength="80"></label>
   <label class="fld"><span>Mail (ahí te llega el QR)</span><input name="email" type="email" required autocomplete="email" maxlength="120"></label>
   <label class="fld"><span>Teléfono</span><input name="telefono" type="tel" autocomplete="tel" maxlength="30" placeholder="09X XXX XXX"></label>
   <label class="fld"><span>Cantidad de entradas</span></label>
   <div class="qty"><button type="button" id="menos">−</button><b id="cant">1</b><button type="button" id="mas">+</button><span class="total" id="total">Total $ 2.000</span></div>
   <div id="comps" class="form"></div>
-  <label class="upload" for="file"><div class="ico">⬆</div><div><b id="fileLbl">Subí la foto del comprobante</b><em>Imagen o PDF · máx 5 MB</em></div></label>
-  <input id="file" type="file" accept="image/*,application/pdf" class="hidden">
+  <div id="mpBox">
+    <button type="button" class="btn" id="mpBtn">Pagar con Mercado Pago</button>
+    <p class="hint" style="margin-top:8px">Pagás con tarjeta o con tu cuenta de Mercado Pago y el QR te llega <b>al instante por mail</b>.</p>
+  </div>
   <div class="err" id="err"></div>
-  <button class="btn" id="send">Enviar comprobante</button>
+  <details id="transf" style="margin-top:10px">
+    <summary class="hint" style="cursor:pointer;text-decoration:underline">Prefiero transferir</summary>
+    <p style="margin-top:10px">Transferí <b id="precio2">$ 2.000</b> por entrada a la cuenta Prex de abajo, subí el comprobante y cuando lo confirmemos te llega tu <b>QR por mail</b>.</p>
+    <div class="pay-row"><span class="k">Prex</span><span class="v" id="prexNum"></span></div>
+    <div class="pay-row"><span class="k">Titular</span><span class="v" id="prexTit"></span></div>
+    <div class="pay-row"><span class="k">Monto</span><span class="v" id="precio3">$ 2.000</span></div>
+    <div class="pay-row"><span class="k">Concepto</span><span class="v">Tu nombre y apellido</span></div>
+    <label class="upload" for="file" style="margin-top:10px"><div class="ico">⬆</div><div><b id="fileLbl">Subí la foto del comprobante</b><em>Imagen o PDF · máx 5 MB</em></div></label>
+    <input id="file" type="file" accept="image/*,application/pdf" class="hidden">
+    <button class="btn ghost" id="send" style="margin-top:10px">Enviar comprobante</button>
+  </details>
 </form>
 </div>
 
@@ -65,10 +69,11 @@ function aplicarPrecio() {
 }
 $('#barra').innerHTML += (C.BARRA || []).map(([n, p]) => '<div class="pay-row"><span class="k">' + n + '</span><span class="v">' + money(p) + '</span></div>').join('');
 aplicarPrecio(); setInterval(aplicarPrecio, 30000);
+function mpLabel() { $('#mpBtn').textContent = 'Pagar ' + money(cant * PN) + ' con Mercado Pago'; }
 function setCant(n) {
   const prev = [...document.querySelectorAll('#comps .comp')].map(d => ({ n: d.querySelector('[name=cn]').value, e: d.querySelector('[name=ce]').value }));
   cant = Math.max(1, Math.min(MAXE, n));
-  $('#cant').textContent = cant; $('#total').textContent = 'Total ' + money(cant * PN); $('#precio3').textContent = money(cant * PN);
+  $('#cant').textContent = cant; $('#total').textContent = 'Total ' + money(cant * PN); $('#precio3').textContent = money(cant * PN); mpLabel();
   let h = '';
   for (let k = 2; k <= cant; k++) h += '<div class="comp"><span class="kicker">Entrada ' + k + ' (opcional)</span>' +
     '<input name="cn" placeholder="Nombre del acompañante" maxlength="80"><input name="ce" type="email" placeholder="Su mail (si no, le llega a tu mail)" maxlength="120"></div>';
@@ -98,20 +103,41 @@ async function compress(file) {
     return { mime, data: await readDataURL(file) };
   }
 }
-$('#f').onsubmit = async e => {
-  e.preventDefault(); const f = e.target, err = $('#err'); err.textContent = '';
+// Mercado Pago (se puede apagar con MP_ACTIVO: false en config.js)
+if (C.MP_ACTIVO === false) { $('#mpBox').classList.add('hidden'); $('#transf').open = true; $('#transf summary').textContent = 'Pagar por transferencia'; }
+function datos() {
+  const f = $('#f'), err = $('#err'); err.textContent = '';
   const nombre = f.nombre.value.trim(), email = f.email.value.trim(), telefono = f.telefono.value.trim();
-  if (!nombre) return err.textContent = 'Poné tu nombre y apellido';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err.textContent = 'Revisá el mail';
-  if (!picked) return err.textContent = 'Falta subir el comprobante';
+  if (!nombre) { err.textContent = 'Poné tu nombre y apellido'; return null; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Revisá el mail'; return null; }
   const acompanantes = [...document.querySelectorAll('#comps .comp')].map(d => ({ nombre: d.querySelector('[name=cn]').value.trim(), email: d.querySelector('[name=ce]').value.trim() }));
   const badMail = acompanantes.findIndex(a => a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email));
-  if (badMail >= 0) return err.textContent = 'Revisá el mail de la entrada ' + (badMail + 2);
+  if (badMail >= 0) { err.textContent = 'Revisá el mail de la entrada ' + (badMail + 2); return null; }
+  const rp = (new URLSearchParams(location.search).get('rp') || '').trim().toLowerCase();
+  return { nombre, email, telefono, rp, cantidad: cant, acompanantes };
+}
+$('#mpBtn').onclick = async () => {
+  const d = datos(); if (!d) return;
+  const b = $('#mpBtn'); b.disabled = true; b.textContent = 'Abriendo Mercado Pago…';
+  try {
+    const r = await api('mp_crear', d);
+    try { localStorage.setItem('lb_ticket', r.token); } catch (_) {}
+    location.href = r.init_point; return;
+  } catch (x) {
+    $('#err').textContent = /desconocida/i.test(x.message) ? 'El pago con Mercado Pago todavía no está disponible. Podés pagar por transferencia acá abajo.' : x.message;
+    if (/desconocida|no está activo/i.test(x.message)) $('#transf').open = true;
+  }
+  b.disabled = false; mpLabel();
+};
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  if (!$('#transf').open) return $('#mpBtn').click(); // Enter en un campo = pagar con MP
+  const d = datos(); if (!d) return; const err = $('#err'), email = d.email;
+  if (!picked) return err.textContent = 'Falta subir el comprobante';
   const b = $('#send'); b.disabled = true; b.textContent = 'Enviando…';
   try {
     const file = await compress(picked);
-    const rp = (new URLSearchParams(location.search).get('rp') || '').trim().toLowerCase();
-    const r = await api('comprar', { nombre, email, telefono, file, rp, cantidad: cant, acompanantes });
+    const r = await api('comprar', Object.assign({ file }, d));
     $('#doneMail').textContent = email + (cant > 1 ? ' (las ' + cant + ' entradas; a los acompañantes con mail propio les llega el suyo)' : '');
     $('#ticketLink').href = 'ticket.html?t=' + encodeURIComponent(r.token);
     try { localStorage.setItem('lb_ticket', r.token); } catch (_) {}

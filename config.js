@@ -15,5 +15,6 @@ window.LB_CONFIG = {
   ],
   MAX_ENTRADAS: 10,
   PREX_NUMERO: 'a confirmar',
-  PREX_TITULAR: 'a confirmar'
+  PREX_TITULAR: 'a confirmar',
+  MP_ACTIVO: true // false = esconde el botón de Mercado Pago (queda solo transferencia)
 };

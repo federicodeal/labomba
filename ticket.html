@@ -13,12 +13,23 @@
   const t = new URLSearchParams(location.search).get('t') || (localStorage.getItem('lb_ticket') || '');
   const box = $('#box');
   if (!t) { box.innerHTML = '<p class="hint">No encontramos tu entrada. Usá el link que te llegó por mail.</p>'; return; }
+  const qs = new URLSearchParams(location.search), volvioMP = qs.has('payment_id') || qs.has('collection_status');
+  const mpFallo = /^(rejected|null|cancelled)$/.test(qs.get('collection_status') || qs.get('status') || '');
   try {
-    const r = await api('ticket', { token: t });
+    let r = await api('ticket', { token: t }), okMP = false;
+    // compra con Mercado Pago todavía pendiente: lo verifica el servidor contra Mercado Pago (unos intentos, por si el aviso tarda)
+    if (r.estado === 'pendiente' && r.metodo === 'mp' && !mpFallo) {
+      box.innerHTML = '<p class="hint">Confirmando tu pago con Mercado Pago…</p>';
+      for (let i = 0; i < (volvioMP ? 5 : 1); i++) {
+        if (i) await new Promise(ok => setTimeout(ok, 6000));
+        try { const c = await api('mp_check', { token: t }); if (c.estado === 'aprobado') { okMP = true; break; } } catch (_) {}
+      }
+      if (okMP) r = await api('ticket', { token: t });
+    }
     const ents = r.entradas && r.entradas.length ? r.entradas : [{ token: t, nombre: r.nombre, estado: r.estado, usado: r.usado }];
     if (r.estado === 'aprobado') {
       const many = ents.length > 1;
-      box.innerHTML = (many ? '<div class="kicker">' + ents.length + ' entradas</div><p class="hint">Cada QR vale para una persona. Podés mandarle a cada uno su link.</p>' : '') +
+      box.innerHTML = (r.metodo === 'mp' && (okMP || volvioMP) ? '<div class="kicker" style="color:var(--red2)">✓ Pago aprobado</div><p class="hint" style="margin-bottom:14px">Tu QR también te llega por mail (revisá spam).</p>' : '') + (many ? '<div class="kicker">' + ents.length + ' entradas</div><p class="hint">Cada QR vale para una persona. Podés mandarle a cada uno su link.</p>' : '') +
         ents.map((e, i) => '<div style="margin-top:' + (i ? 22 : 0) + 'px">' + (many ? '<div class="kicker">Entrada ' + (i + 1) + '</div>' : '<div class="kicker">Hola</div>') +
           '<h3 style="font-size:22px">' + esc(e.nombre) + '</h3>' +
           (e.estado === 'aprobado' ? '<div class="qrbox" id="qr' + i + '"></div>' : '<p class="hint">Entrada ' + esc(e.estado) + '</p>') +
@@ -28,6 +39,9 @@
         '<p class="hint" style="margin-top:8px">Se marca como usado la primera vez que se escanea.</p>';
       ents.forEach((e, i) => { if (e.estado === 'aprobado') new QRCode($('#qr' + i), { text: e.token, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M }); });
       box.onclick = ev => { const b = ev.target.closest('[data-l]'); if (!b) return; const u = location.origin + location.pathname + '?t=' + b.dataset.l; navigator.clipboard.writeText(u).catch(() => prompt('Copiá el link:', u)); b.textContent = 'Copiado'; };
+    } else if (r.estado === 'pendiente' && r.metodo === 'mp') {
+      box.innerHTML = '<h3>' + esc(r.nombre) + '</h3><p class="hint">' + (mpFallo ? 'El pago con Mercado Pago <b>no se completó</b>.' : 'Todavía no vemos tu pago de Mercado Pago. Si ya pagaste, esperá un minuto y recargá esta página.') +
+        '</p><a class="btn" href="./" style="margin-top:12px">Volver a intentar la compra</a><button class="btn ghost" onclick="location.reload()" style="margin-top:8px">Ya pagué, recargar</button>';
     } else if (r.estado === 'pendiente') {
       box.innerHTML = '<h3>' + esc(r.nombre) + '</h3><p class="hint">Tu pago' + (ents.length > 1 ? ' de ' + ents.length + ' entradas' : '') + ' está <b>pendiente de confirmación</b>. Cuando lo aprobemos, en esta misma página aparece tu QR (y te llega por mail).</p>';
     } else {

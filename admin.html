@@ -122,12 +122,12 @@ function card(o, pend) {
   else if (o.estado === 'rechazado') btns = verBtn + '<button class="btn sm ghost" data-a="aprobar">Aprobar igual</button>';
   btns += '<button class="btn sm danger" data-a="borrar" title="Borrar entrada">🗑</button>';
   return '<div class="person" data-t="' + esc(o.token) + '"><div class="top"><div class="av">' + esc(initials(o.nombre)) + '</div>' +
-    '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? 'Pagó · ' : 'Invitado · ') + esc(o.creado) + (o.aprobadoPor && o.aprobadoPor.indexOf('rrpp:') === 0 && o.estado === 'aprobado' ? ' · aprobó el RRPP' : '') + (o.rrpp ? ' · RRPP <b style="display:inline;font-size:12px;color:var(--red2)">' + esc(o.rrppNombre || o.rrpp) + '</b>' : '') + '</small></div>' + chip(o) + '</div>' +
+    '<div class="info"><b>' + esc(o.nombre) + '</b><small>' + sub + '</small><small>' + (o.tipo === 'pago' ? (o.metodo === 'mp' ? 'Mercado Pago · ' : 'Pagó · ') : 'Invitado · ') + esc(o.creado) + (o.aprobadoPor && o.aprobadoPor.indexOf('rrpp:') === 0 && o.estado === 'aprobado' ? ' · aprobó el RRPP' : o.aprobadoPor === 'mercadopago' && o.estado === 'aprobado' ? ' · aprobado por Mercado Pago' : '') + (o.rrpp ? ' · RRPP <b style="display:inline;font-size:12px;color:var(--red2)">' + esc(o.rrppNombre || o.rrpp) + '</b>' : '') + '</small></div>' + chip(o) + '</div>' +
     '<div class="row">' + btns + '</div></div>';
 }
 function render() {
   const q = $('#q').value.trim().toLowerCase();
-  const all = DATA.items.filter(o => o.estado !== 'pendiente' && (!q || (o.nombre + ' ' + o.email).toLowerCase().includes(q)));
+  const all = DATA.items.filter(o => o.estado !== 'pendiente' && (o.estado !== 'sin pagar' || q) && (!q || (o.nombre + ' ' + o.email).toLowerCase().includes(q)));
   $('#listAll').innerHTML = all.map(o => card(o, false)).join('') || '<p class="hint">Todavía no hay entradas.</p>';
   const p = DATA.items.filter(o => o.estado === 'pendiente');
   const groups = {}, order = [];

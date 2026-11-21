@@ -14,7 +14,7 @@ window.LB_CONFIG = {
     ['Botella de champagne', 1500], ['Red Bull', 300], ['Agua', 200], ['Refrescos', 200]
   ],
   MAX_ENTRADAS: 10,
-  PREX_NUMERO: 'a confirmar',
-  PREX_TITULAR: 'a confirmar',
+  PREX_NUMERO: '1548831',
+  PREX_TITULAR: 'Micaela Acosta',
   MP_ACTIVO: true // false = esconde el botón de Mercado Pago (queda solo transferencia)
 };

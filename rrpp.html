@@ -43,10 +43,16 @@
     </details>
   </div>
   <div class="err" id="ierr"></div>
+  <div id="pagBox" class="hidden">
+    <h3 class="kicker" style="margin:6px 0 8px">Pagos por aprobar <span class="pill" id="pp">0</span></h3>
+    <p class="hint" style="margin-bottom:8px">Revisá que el comprobante esté bien antes de aprobar: al aprobar les llegan los QR.</p>
+    <div class="list" id="pend" style="margin-bottom:14px"></div>
+  </div>
   <h3 class="kicker" style="margin:6px 0 8px">Mi gente</h3>
   <div class="list" id="list"></div>
 </div>
 </div>
+<div id="modal" class="modal hidden"></div>
 <script src="config.js"></script><script src="api.js"></script>
 <script>
 let PIN = sessionStorage.getItem('lb_rp_pin') || '', D = null;
@@ -76,7 +82,12 @@ async function load() {
   const full = D.tope && s.invitados >= D.tope;
   $('#cupo').textContent = D.tope ? 'Invitados: ' + s.invitados + ' de ' + D.tope + ' usados' + (full ? ' · llegaste al tope' : '') : '';
   document.querySelectorAll('#invBox button').forEach(b => b.disabled = !!full);
-  $('#list').innerHTML = D.items.map(o => {
+  const pend = D.items.filter(o => o.tipo === 'pago' && o.estado === 'pendiente');
+  const groups = {}, order = [];
+  pend.forEach(o => { const k = o.compra || o.token; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(o); });
+  $('#pagBox').classList.toggle('hidden', !order.length); $('#pp').textContent = order.length;
+  $('#pend').innerHTML = order.map(k => payCard(groups[k])).join('');
+  $('#list').innerHTML = D.items.filter(o => o.estado !== 'pendiente').map(o => {
     const chip = o.usado ? '<span class="chip in">Entró</span>' : o.estado === 'aprobado' ? '<span class="chip">' + (o.tipo === 'pago' ? 'Vendida' : 'Invitado') + '</span>' :
       o.estado === 'pendiente' ? '<span class="chip wait">Pago pendiente</span>' : '<span class="chip no">' + esc(o.estado) + '</span>';
     const btns = o.estado === 'aprobado' ? '<div class="row"><button class="btn sm ghost" data-a="reenviar">Reenviar mail</button>' +
@@ -85,6 +96,33 @@ async function load() {
       [o.email, o.telefono].filter(Boolean).map(esc).join(' · ') + '</small></div>' + chip + '</div>' + btns + '</div>';
   }).join('') || '<p class="hint">Todavía no cargaste a nadie.</p>';
 }
+function payCard(g) {
+  const buyer = g.find(o => o.nota === 'comprador') || g[g.length - 1], n = g.length;
+  const total = '$ ' + (n * (window.LB_CONFIG.PRECIO_NUM || 2000)).toLocaleString('es-UY');
+  const names = n > 1 ? '<small style="margin-top:4px;color:#C9D4D6">' + g.map(o => esc(o.nombre) + (o.email && o.email !== buyer.email ? ' <span style="color:var(--muted)">(' + esc(o.email) + ')</span>' : '')).join('<br>') + '</small>' : '';
+  return '<div class="person" data-t="' + esc(buyer.token) + '"><div class="top"><div class="av">' + (n > 1 ? n : esc(initials(buyer.nombre))) + '</div>' +
+    '<div class="info"><b>' + esc(buyer.nombre) + ' · ' + n + (n > 1 ? ' entradas' : ' entrada') + ' · ' + total + '</b><small>' + [buyer.email, buyer.telefono].filter(Boolean).map(esc).join(' · ') + '</small>' +
+    '<small>' + esc(buyer.creado) + '</small>' + names + '</div><span class="chip wait">Pendiente</span></div>' +
+    '<div class="row">' + (buyer.comprobante ? '<button class="btn sm ghost" data-p="ver">Ver comprobante</button>' : '') +
+    '<button class="btn sm ok" data-p="aprobar">' + (n > 1 ? 'Aprobar las ' + n + ' y mandar QRs' : 'Aprobar y mandar QR') + '</button><button class="btn sm danger" data-p="rechazar">Rechazar</button></div></div>';
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-p]'); if (!b) return;
+  const token = b.closest('.person').dataset.t, a = b.dataset.p;
+  if (a === 'rechazar' && !confirm('¿Rechazar este pago?')) return;
+  b.disabled = true; const t0 = b.textContent; b.textContent = '…';
+  try {
+    if (a === 'ver') {
+      const r = await api('comprobante', { pin: PIN, token }), m = $('#modal'), src = 'data:' + r.mime + ';base64,' + r.data;
+      m.innerHTML = r.mime === 'application/pdf' ? '<iframe src="' + src + '"></iframe>' : '<img src="' + src + '" alt="Comprobante">';
+      m.classList.remove('hidden'); m.onclick = () => m.classList.add('hidden');
+      b.disabled = false; b.textContent = t0; return;
+    }
+    const r = await api(a, { pin: PIN, token });
+    if (a === 'aprobar' && (r.mail === false || r.error)) alert('Aprobado, pero algún mail no salió: ' + (r.error || '') + '\nMandá el link por WhatsApp.');
+    await load();
+  } catch (x) { alert(x.message); b.disabled = false; b.textContent = t0; }
+});
 document.addEventListener('click', async e => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const token = b.closest('.person').dataset.t;

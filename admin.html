@@ -105,7 +105,7 @@ function recTok(o) {
   return b ? b.token : '';
 }
 function card(o, pend) {
-  const rt = recTok(o), verBtn = rt ? '<button class="btn sm ghost" data-a="ver" data-r="' + esc(rt) + '">Ver comprobante</button>' : '';
+  const rt = recTok(o), verBtn = rt ? '<button class="btn sm ghost" data-a="ver" data-rt="' + esc(rt) + '">Ver comprobante</button>' : '';
   const sub = [o.email, o.telefono].filter(Boolean).map(esc).join(' · ');
   let btns = '';
   if (pend) btns = (o.comprobante ? '<button class="btn sm ghost" data-a="ver">Ver comprobante</button>' : '') +
@@ -203,7 +203,7 @@ document.addEventListener('click', async e => {
   if (a === 'desmarcar' && !confirm('¿Marcar que ' + o.nombre + ' todavía no entró?')) return;
   b.disabled = true; const t0 = b.textContent; b.textContent = '…';
   try {
-    if (a === 'ver') { showReceipt(await api('comprobante', { pin: PIN, token: b.dataset.r || token })); b.disabled = false; b.textContent = t0; return; }
+    if (a === 'ver') { showReceipt(await api('comprobante', { pin: PIN, token: b.dataset.rt || token })); b.disabled = false; b.textContent = t0; return; }
     const r = await api(a, { pin: PIN, token });
     if ((a === 'aprobar' || a === 'reenviar') && r.mail === false || r.error) alert('Aprobado, pero el mail no salió: ' + (r.error || '') + '\nMandale el link por WhatsApp.');
     await load();

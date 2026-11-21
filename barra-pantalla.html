@@ -1,0 +1,88 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><meta name="theme-color" content="#070809"><title>Pantalla barra · LA BOMBA</title>
+<link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page wide" id="wrap">
+<div id="login" class="card form" style="max-width:420px;margin:60px auto;text-align:center">
+  <img src="assets/bomb.svg" style="width:70px;margin:0 auto" alt=""><div class="logo" style="font-size:48px">LA BOMBA</div>
+  <div class="kicker">Pantalla de la barra</div>
+  <input id="pin" type="password" autocapitalize="off" autocorrect="off" placeholder="Clave" style="text-align:center;font-size:22px;letter-spacing:.3em">
+  <div class="err" id="lerr"></div><button class="btn" id="go">Entrar</button>
+</div>
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="brand"><img src="assets/bomb.svg" alt=""><span class="logo">LA BOMBA</span><span class="kicker" style="margin-left:8px">Barra</span></div>
+    <div class="row"><span class="hint" id="st" style="align-self:center">Actualiza sola</span>
+      <button class="btn sm ghost" id="out">Salir</button></div>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <input id="q" placeholder="Buscar por número o nombre…" style="flex:1;min-width:180px">
+    <button class="btn sm ghost" id="refrescar">Actualizar</button>
+  </div>
+  <div id="cola" class="cola"></div>
+</div>
+</div>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+const DEMO = new URLSearchParams(location.search).get('demo') === '1';
+const DEMO_PEDIDOS = [
+  { token: 'd1', numero: '012', nombre: 'María López', hora: '21:04', monto: 1200, items: [{ qty: 2, nombre: 'Fernet con coca' }, { qty: 1, nombre: 'Aperol' }] },
+  { token: 'd2', numero: '013', nombre: 'Juan Pérez', hora: '21:06', monto: 1100, items: [{ qty: 2, nombre: 'Fernet con coca' }, { qty: 1, nombre: 'Red Bull' }] },
+  { token: 'd3', numero: '014', nombre: 'Camila Ferreira', hora: '21:08', monto: 2300, items: [{ qty: 1, nombre: 'Champagne' }, { qty: 2, nombre: 'Vodka tonic' }] },
+  { token: 'd4', numero: '015', nombre: 'Mateo Álvarez', hora: '21:09', monto: 1200, items: [{ qty: 3, nombre: 'Fernet con coca' }] }
+];
+let PIN = sessionStorage.getItem('lb_barra_pin') || '', DATA = DEMO ? DEMO_PEDIDOS.slice() : [], timer = null;
+
+async function login(p) {
+  if (DEMO) { PIN = 'demo'; }
+  else {
+    const r = await api('login', { pin: p });
+    if (r.rol !== 'admin' && r.rol !== 'puerta' && r.rol !== 'barra') throw new Error('Esa clave no es de la barra');
+    PIN = p; sessionStorage.setItem('lb_barra_pin', p);
+  }
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+  load(); timer = setInterval(load, 5000);
+}
+$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
+$('#out').onclick = () => { sessionStorage.removeItem('lb_barra_pin'); location.reload(); };
+$('#refrescar').onclick = () => load();
+$('#q').oninput = () => pintar();
+if (DEMO) login('demo');
+else if (PIN) login(PIN).catch(() => sessionStorage.removeItem('lb_barra_pin'));
+
+async function load() {
+  if (!DEMO) {
+    try { const r = await api('tragos_cola', { pin: PIN, q: $('#q').value.trim() }); DATA = r.pedidos || []; $('#st').textContent = 'Actualizada · ' + DATA.length + ' en cola'; }
+    catch (e) { $('#st').textContent = e.message; }
+  } else {
+    $('#st').textContent = DATA.length ? (DATA.length + ' en cola') : 'Sin pedidos';
+  }
+  pintar();
+}
+function pintar() {
+  const q = ($('#q').value || '').trim().toLowerCase();
+  const list = DATA.filter(o => !q || String(o.numero).indexOf(q) >= 0 || (o.nombre || '').toLowerCase().indexOf(q) >= 0);
+  const box = $('#cola');
+  if (!list.length) {
+    box.className = 'cola-empty';
+    box.innerHTML = '<div class="logo">LA BOMBA</div><p>No hay pedidos pendientes' + (q ? ' con esa búsqueda' : '') + '.</p>';
+    return;
+  }
+  box.className = 'cola';
+  box.innerHTML = list.map(o =>
+    '<div class="orden" data-t="' + esc(o.token) + '"><div class="num">' + esc(o.numero) + '</div>' +
+    '<div class="quien">' + esc(o.nombre) + '</div>' +
+    '<ul>' + (o.items || []).map(it => '<li><b>' + it.qty + '×</b> ' + esc(it.nombre) + '</li>').join('') + '</ul>' +
+    '<div class="pay-row" style="margin-bottom:10px"><span class="k">' + esc(o.hora || '') + '</span><span class="v">$ ' + Number(o.monto).toLocaleString('es-UY') + '</span></div>' +
+    '<button class="btn ok" data-e="' + esc(o.token) + '">Entregado</button></div>'
+  ).join('');
+}
+$('#cola').onclick = async e => {
+  const b = e.target.closest('[data-e]'); if (!b) return;
+  const token = b.dataset.e;
+  if (DEMO) { DATA = DATA.filter(o => o.token !== token); pintar(); $('#st').textContent = DATA.length + ' en cola'; return; }
+  b.disabled = true; b.textContent = 'Marcando…';
+  try { await api('tragos_entregar', { pin: PIN, token }); DATA = DATA.filter(o => o.token !== token); pintar(); }
+  catch (x) { b.disabled = false; b.textContent = 'Entregado'; alert(x.message); }
+};
+</script></body></html>

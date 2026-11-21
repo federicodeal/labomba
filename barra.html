@@ -1,0 +1,136 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Barra · LA BOMBA</title><meta name="description" content="Pedí tu trago en La Bomba y pagá con Mercado Pago">
+<link rel="icon" href="assets/bomb.svg"><link rel="stylesheet" href="app.css"></head>
+<body><div class="page" id="page">
+  <div class="hero" style="padding-bottom:4px"><img class="bomb" src="assets/bomb.svg" alt=""><div class="logo" style="font-size:64px">LA BOMBA</div>
+    <div class="kicker" style="margin-top:6px">Barra</div></div>
+  <div id="box"><p class="hint" style="text-align:center">Cargando la carta…</p></div>
+</div>
+<script src="config.js"></script><script src="api.js"></script>
+<script>
+const DEMO = new URLSearchParams(location.search).get('demo') === '1';
+const TOKEN = (new URLSearchParams(location.search).get('pedido') || '').trim();
+const money = n => '$ ' + Number(n).toLocaleString('es-UY');
+const MENU_FALLBACK = [
+  { id: 'fernet', nombre: 'Fernet con coca', precio: 400 },
+  { id: 'gin', nombre: 'Gin tonic', precio: 400 },
+  { id: 'vodka', nombre: 'Vodka tonic', precio: 400 },
+  { id: 'aperol', nombre: 'Aperol', precio: 400 },
+  { id: 'redbull', nombre: 'Red Bull', precio: 300 },
+  { id: 'champagne', nombre: 'Champagne', precio: 1500 }
+];
+const DEMO_PEDIDO = {
+  ok: true, numero: '013', estado: 'pagado', nombre: 'Juan Pérez', monto: 1100,
+  items: [{ nombre: 'Fernet con coca', qty: 2, precio: 400 }, { nombre: 'Red Bull', qty: 1, precio: 300 }]
+};
+
+function itemsHtml(items) {
+  return items.map(it => '<div class="pay-row"><span class="k">' + it.qty + ' × ' + esc(it.nombre) + '</span><span class="v">' + money(it.precio * it.qty) + '</span></div>').join('');
+}
+function renderPedido(o, extra) {
+  const pagado = o.estado === 'pagado', ent = o.estado === 'entregado';
+  const banda = ent ? 'entregado' : (pagado ? 'pagado' : 'wait');
+  const txt = ent ? 'Entregado' + (o.entregado ? ' · ' + o.entregado : '') : (pagado ? 'Pagado — mostralo en la barra' : (extra || 'Confirmando tu pago…'));
+  $('#box').innerHTML =
+    (o.numero ? '<div class="num-gigante">' + esc(o.numero) + '</div>' : '') +
+    '<div class="estado-banda ' + banda + '">' + esc(txt) + '</div>' +
+    '<div class="card" style="text-align:center"><h3 style="font-size:26px;margin-bottom:10px">' + esc(o.nombre) + '</h3>' +
+    itemsHtml(o.items || []) +
+    '<div class="pay-row" style="margin-top:10px"><span class="k">Total</span><span class="v">' + money(o.monto) + '</span></div></div>' +
+    (pagado ? '<p class="hint" style="text-align:center">Cuando te lo den, este número ya no sirve otra vez.</p>' : '') +
+    (o.estado === 'pendiente' ? '<button class="btn ghost" id="reload" style="margin-top:10px">Ya pagué, recargar</button>' : '');
+  const b = $('#reload'); if (b) b.onclick = () => location.reload();
+}
+
+async function verPedido(token) {
+  if (DEMO) { renderPedido(DEMO_PEDIDO); return; }
+  const qs = new URLSearchParams(location.search);
+  const volvioMP = qs.has('payment_id') || qs.has('collection_status');
+  const mpFallo = /^(rejected|null|cancelled)$/.test(qs.get('collection_status') || qs.get('status') || '');
+  try {
+    let o = await api('tragos_estado', { token });
+    if (o.estado === 'pendiente' && !mpFallo) {
+      renderPedido(o, 'Confirmando tu pago con Mercado Pago…');
+      for (let i = 0; i < (volvioMP ? 5 : 1); i++) {
+        if (i) await new Promise(ok => setTimeout(ok, 5000));
+        try { o = await api('tragos_estado', { token }); if (o.estado === 'pagado' || o.estado === 'entregado') break; } catch (_) {}
+      }
+    }
+    if (o.estado === 'pendiente' && mpFallo) renderPedido(o, 'El pago no se completó. Volvé a pedir.');
+    else renderPedido(o);
+    if (o.estado === 'pagado') setTimeout(() => verPedido(token), 8000);
+    else if (o.estado === 'pendiente' && !mpFallo) setTimeout(() => verPedido(token), 5000);
+  } catch (e) {
+    $('#box').innerHTML = '<div class="card"><p class="hint">' + esc(e.message) + '</p><a class="btn ghost" href="barra.html" style="margin-top:10px">Volver a la carta</a></div>';
+  }
+}
+
+function renderMenu(menu, mp) {
+  const qty = Object.fromEntries(menu.map(m => [m.id, 0]));
+  if (DEMO) { qty.fernet = 2; qty.redbull = 1; }
+  function total() { return menu.reduce((s, m) => s + m.precio * qty[m.id], 0); }
+  function pintar() {
+    $('#carta').innerHTML = menu.map(m =>
+      '<div class="drink"><div class="info"><b>' + esc(m.nombre) + '</b><span>' + money(m.precio) + '</span></div>' +
+      '<div class="qty"><button type="button" data-m="' + m.id + '">−</button><b>' + qty[m.id] + '</b><button type="button" data-p="' + m.id + '">+</button></div></div>'
+    ).join('');
+    const t = total(), btn = $('#pay');
+    $('#tot').textContent = 'Total ' + money(t);
+    btn.disabled = !t;
+    btn.textContent = t ? 'Pagar ' + money(t) + ' con Mercado Pago' : 'Elegí tus tragos';
+  }
+  $('#box').innerHTML =
+    '<p class="hint" style="text-align:center;margin-bottom:10px">Elegí tus tragos, pagá con Mercado Pago y mostrá el número en la barra.</p>' +
+    '<div class="card" id="carta"></div>' +
+    '<form class="card form" id="f" novalidate>' +
+    '<label class="fld"><span>Tu nombre (para la barra)</span><input name="nombre" required autocomplete="name" maxlength="80" placeholder="Nombre y apellido"' + (DEMO ? ' value="Juan Pérez"' : '') + '></label>' +
+    '<div class="err" id="err"></div>' +
+    '<div class="sticky-pay"><div class="total" id="tot" style="text-align:center;margin-bottom:8px;display:block">Total $ 0</div>' +
+    '<button type="submit" class="btn" id="pay">Elegí tus tragos</button></div></form>';
+  pintar();
+  try { const last = localStorage.getItem('lb_pedido'); if (last && !DEMO) {
+    const a = document.createElement('p'); a.className = 'hint'; a.style.textAlign = 'center'; a.style.marginBottom = '10px';
+    a.innerHTML = '<a href="barra.html?pedido=' + encodeURIComponent(last) + '" style="color:var(--cream)">Ya pedí: ver mi número</a>';
+    $('#box').insertBefore(a, $('#carta'));
+  } } catch (_) {}
+  $('#carta').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const id = b.dataset.p || b.dataset.m;
+    qty[id] = Math.max(0, Math.min(20, qty[id] + (b.dataset.p ? 1 : -1)));
+    pintar();
+  };
+  $('#f').onsubmit = async e => {
+    e.preventDefault();
+    const err = $('#err'); err.textContent = '';
+    const nombre = $('#f').nombre.value.trim();
+    if (!nombre) { err.textContent = 'Poné tu nombre'; return; }
+    const items = menu.filter(m => qty[m.id] > 0).map(m => ({ id: m.id, qty: qty[m.id] }));
+    if (!items.length) { err.textContent = 'Elegí al menos un trago'; return; }
+    if (DEMO) { location.href = 'barra.html?pedido=DEMO&demo=1'; return; }
+    if (mp === false) { err.textContent = 'El pago con Mercado Pago todavía no está disponible.'; return; }
+    const b = $('#pay'); b.disabled = true; b.textContent = 'Abriendo Mercado Pago…';
+    try {
+      const r = await api('tragos_pedir', { nombre, items });
+      try { localStorage.setItem('lb_pedido', r.token); } catch (_) {}
+      location.href = r.init_point; return;
+    } catch (x) { err.textContent = x.message; }
+    b.disabled = false; pintar();
+  };
+}
+
+(async () => {
+  if (TOKEN) { verPedido(TOKEN === 'DEMO' && DEMO ? 'DEMO' : TOKEN); return; }
+  if (DEMO) { renderMenu(MENU_FALLBACK, true); return; }
+  try {
+    const r = await api('tragos_menu');
+    renderMenu(r.menu && r.menu.length ? r.menu : MENU_FALLBACK, r.mp);
+  } catch (e) {
+    renderMenu(MENU_FALLBACK, true);
+    const box = $('#box');
+    const hint = document.createElement('p');
+    hint.className = 'hint'; hint.style.textAlign = 'center';
+    hint.textContent = e.message || 'No se pudo cargar el menú del servidor; se muestra la carta de respaldo.';
+    box.prepend(hint);
+  }
+})();
+</script></body></html>

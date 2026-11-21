@@ -52,9 +52,10 @@
 const C = window.LB_CONFIG;
 $('#prexNum').textContent = C.PREX_NUMERO; $('#prexTit').textContent = C.PREX_TITULAR;
 ['#precio','#precio2','#precio3'].forEach(s => $(s).textContent = C.PRECIO);
-const PN = C.PRECIO_NUM || 2000, MAXE = C.MAX_ENTRADAS || 10;
+let PN = C.PRECIO_NUM || 2000; const MAXE = C.MAX_ENTRADAS || 10;
 let cant = 1;
 const money = n => '$ ' + n.toLocaleString('es-UY');
+api('config', {}).then(r => { if (r.precio > 0) { PN = r.precio; ['#precio','#precio2'].forEach(s => $(s).textContent = money(PN)); setCant(cant); } }).catch(() => {});
 function setCant(n) {
   const prev = [...document.querySelectorAll('#comps .comp')].map(d => ({ n: d.querySelector('[name=cn]').value, e: d.querySelector('[name=ce]').value }));
   cant = Math.max(1, Math.min(MAXE, n));

@@ -31,8 +31,8 @@
     <form class="card form" id="addOne">
       <h3>Invitar (le llega el QR ya)</h3>
       <input name="nombre" placeholder="Nombre y apellido" maxlength="80">
-      <input name="email" type="email" placeholder="mail@ejemplo.com" maxlength="120">
-      <input name="telefono" type="tel" placeholder="Teléfono (opcional)" maxlength="30">
+      <input name="email" type="email" placeholder="Mail (opcional si ponés teléfono)" maxlength="120">
+      <input name="telefono" type="tel" placeholder="Teléfono (para WhatsApp)" maxlength="30">
       <button class="btn">Enviar QR</button>
     </form>
     <details class="card"><summary class="kicker" style="cursor:pointer">Cargar varios de una</summary>
@@ -145,7 +145,7 @@ $('#copyLink').onclick = async () => { await navigator.clipboard.writeText(D.lin
 async function add(list, btn) {
   $('#ierr').textContent = ''; btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'Enviando…';
   try {
-    const r = await api('agregar', { pin: PIN, invitados: list });
+    const r = await api('agregar', { pin: PIN, invitados: list }); window._last = r;
     const bad = r.resultados.filter(x => !x.ok || !x.mail);
     if (bad.length) $('#ierr').textContent = bad.map(x => x.nombre + ': ' + (x.error || 'mail no enviado')).join(' · ');
     btn.disabled = false; btn.textContent = t0; await load(); return true;
@@ -155,8 +155,15 @@ $('#addOne').onsubmit = async e => {
   e.preventDefault(); const f = e.target;
   const g = { nombre: f.nombre.value.trim(), email: f.email.value.trim(), telefono: f.telefono.value.trim() };
   if (!g.nombre || !(g.email || g.telefono)) return $('#ierr').textContent = 'Poné nombre y mail (o teléfono)';
-  if (await add([g], f.querySelector('button'))) f.reset();
+  const soloWa = !g.email && g.telefono;
+  if (await add([g], f.querySelector('button'))) {
+    const x = (window._last && window._last.resultados || [])[0];
+    f.reset(); setBtn();
+    if (soloWa && x && x.ok && x.token) location.href = waTicket({ nombre: g.nombre, telefono: g.telefono, token: x.token });
+  }
 };
+function setBtn() { const f = $('#addOne'); f.querySelector('button').textContent = (!f.email.value.trim() && f.telefono.value.trim()) ? 'Mandar QR por WhatsApp' : 'Enviar QR'; }
+$('#addOne').email.addEventListener('input', setBtn); $('#addOne').telefono.addEventListener('input', setBtn);
 function csvRow(l) {
   const out = []; let cur = '', q = false;
   const sep = (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : (l.includes('\t') ? '\t' : ',');

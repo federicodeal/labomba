@@ -93,3 +93,8 @@ textarea{min-height:120px;resize:vertical}
 #reader video{width:100%!important;display:block}
 .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:10px auto}
 select option{background:#111;color:#fff}
+
+.cta-down{display:block;text-align:center;margin:14px auto 6px;padding:14px 18px;max-width:420px;background:#FF1E2D;color:#fff;font-weight:900;letter-spacing:2px;font-size:18px;border-radius:12px;text-decoration:none;box-shadow:0 0 18px rgba(255,30,45,.55)}
+.cta-down .arrow{display:block;font-size:30px;line-height:1;margin-top:4px;animation:bob 1.1s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+html{scroll-behavior:smooth}

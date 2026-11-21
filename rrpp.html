@@ -4,6 +4,7 @@
 <div id="login" class="card form" style="margin-top:40px;text-align:center">
   <img src="assets/bomb.svg" style="width:70px;margin:0 auto" alt=""><div class="logo" style="font-size:48px">LA BOMBA</div>
   <div class="kicker">Panel RRPP</div>
+  <select id="rp" style="text-align:center;font-size:18px;margin-bottom:10px"><option value="">Cargando RRPP…</option></select>
   <input id="pin" type="password" autocapitalize="off" autocorrect="off" placeholder="Tu clave" style="text-align:center;font-size:22px;letter-spacing:.3em">
   <div class="err" id="lerr"></div><button class="btn" id="go">Entrar</button>
 </div>
@@ -56,13 +57,20 @@
 <script src="config.js"></script><script src="api.js"></script>
 <script>
 let PIN = sessionStorage.getItem('lb_rp_pin') || '', D = null;
-async function login(p) {
+let LISTA = false;
+api('rrpp_lista', {}).then(r => {
+  LISTA = true;
+  $('#rp').innerHTML = '<option value="">Elegí tu nombre</option>' + r.rrpp.map(x => `<option value="${x.slug}">${x.nombre.replace(/</g, '&lt;')}</option>`).join('');
+}).catch(() => $('#rp').classList.add('hidden'));
+async function login(p, sel) {
+  if (sel !== undefined && LISTA && !sel) throw new Error('Elegí tu nombre de la lista');
   const r = await api('login', { pin: p });
   if (r.rol !== 'rrpp') throw new Error(r.rol === 'admin' ? 'Esa es la clave del panel principal: entrá por admin.html' : 'Clave incorrecta');
+  if (sel && r.slug !== sel) throw new Error('Clave incorrecta');
   PIN = p; sessionStorage.setItem('lb_rp_pin', p);
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); load();
 }
-$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim(), $('#rp').value).catch(e => $('#lerr').textContent = e.message); };
 $('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
 $('#out').onclick = () => { sessionStorage.removeItem('lb_rp_pin'); location.reload(); };
 if (PIN) login(PIN).catch(() => sessionStorage.removeItem('lb_rp_pin'));

@@ -29,12 +29,14 @@
     </form>
     <details class="card"><summary class="kicker" style="cursor:pointer">Cargar varios de una</summary>
       <form class="form" id="addBulk" style="margin-top:10px">
-        <p class="hint">Uno por línea: <b>nombre, mail, teléfono</b> · hasta 60 por tanda</p>
+        <p class="hint">Subí un CSV (nombre, teléfono, mail) o pegá uno por línea. Si falta el mail o el teléfono dejá el lugar vacío. Los que tienen mail reciben el QR solo; a los demás te quedan botones para mandarlo por WhatsApp o copiar el link.</p>
+        <input type="file" id="csv" accept=".csv,text/csv,text/plain">
         <textarea name="lista" placeholder="Camila Ferreira, camila@gmail.com, 099123456&#10;Mateo Álvarez, mateo@gmail.com"></textarea>
         <button class="btn">Cargar y enviar QRs</button>
       </form>
     </details>
     <div class="err" id="ierr"></div>
+    <div id="sinMail" class="card hidden"></div>
     <input id="q" placeholder="Buscar por nombre o mail…" style="margin-bottom:10px">
     <div class="list" id="listAll"></div>
   </div>
@@ -230,15 +232,62 @@ $('#addOne').onsubmit = async e => {
   if (!g.nombre || !(g.email || g.telefono)) return $('#ierr').textContent = 'Poné nombre y mail (o teléfono)';
   if (await add([g], f.querySelector('button'))) f.reset();
 };
+function csvRow(l) {
+  const out = []; let cur = '', q = false;
+  const sep = (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : (l.includes('\t') ? '\t' : ',');
+  for (let i = 0; i < l.length; i++) {
+    const c = l[i];
+    if (q) { if (c === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true; else if (c === sep) { out.push(cur.trim()); cur = ''; } else cur += c;
+  }
+  out.push(cur.trim()); return out;
+}
+function parseLista(txt) {
+  return txt.replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(csvRow)
+    .filter(p => !/^nombre$/i.test(p[0] || ''))
+    .map(p => {
+      const email = p.slice(1).find(s => s.includes('@')) || '', tel = p.slice(1).find(s => !s.includes('@') && /^\+?[\d\s().-]{6,}$/.test(s)) || '';
+      return { nombre: p[0], email, telefono: tel };
+    }).filter(g => g.nombre);
+}
+$('#csv').onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  $('#addBulk').lista.value = (await file.text()).trim();
+};
+function showSinMail(rows) {
+  const box = $('#sinMail');
+  if (!rows.length) { box.classList.add('hidden'); return; }
+  box.innerHTML = '<div class="kicker">Les falta el mail: mandales el QR vos (' + rows.length + ')</div>' + rows.map(o =>
+    '<div class="row" style="align-items:center;justify-content:space-between;margin-top:8px"><span>' + o.nombre.replace(/</g, '&lt;') + '</span><span class="row">' +
+    (o.telefono ? '<a class="btn sm wa" target="_blank" href="' + waLink(o) + '">WhatsApp</a>' : '') +
+    '<button class="btn sm ghost" data-cp="' + o.token + '">Copiar link</button></span></div>').join('') +
+    '<button class="btn sm ghost" style="margin-top:10px" id="sinMailOk">Listo, cerrar</button>';
+  box.classList.remove('hidden');
+  box.querySelectorAll('[data-cp]').forEach(b => b.onclick = async () => { const u = ticketUrl(b.dataset.cp); await navigator.clipboard.writeText(u).catch(() => prompt('Copiá el link:', u)); b.textContent = 'Copiado'; });
+  $('#sinMailOk').onclick = () => box.classList.add('hidden');
+}
 $('#addBulk').onsubmit = async e => {
-  e.preventDefault(); const f = e.target;
-  const list = f.lista.value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-    const p = l.split(/[,;\t]/).map(s => s.trim());
-    const email = p.find(s => s.includes('@')) || '', tel = p.slice(1).find(s => /^\+?[\d\s-]{6,}$/.test(s)) || '';
-    return { nombre: p[0], email, telefono: tel };
-  });
-  if (!list.length) return;
-  if (!confirm('Cargar ' + list.length + ' invitados y mandarles el QR?')) return;
-  if (await add(list, f.querySelector('button'))) f.reset();
+  e.preventDefault(); const f = e.target, btn = f.querySelector('button');
+  const list = parseLista(f.lista.value);
+  if (!list.length) return $('#ierr').textContent = 'No encontré nombres en la lista';
+  const conMail = list.filter(g => g.email).length, soloTel = list.filter(g => !g.email && g.telefono).length, nada = list.length - conMail - soloTel;
+  if (!confirm('Cargar ' + list.length + ' invitados:\n· ' + conMail + ' con mail (les llega el QR solo)\n· ' + soloTel + ' solo con teléfono (te queda botón de WhatsApp)\n· ' + nada + ' sin mail ni teléfono (te queda el link para copiar)\n\n¿Seguimos?')) return;
+  $('#ierr').textContent = ''; btn.disabled = true; const t0 = btn.textContent;
+  const sin = [], errs = [];
+  try {
+    for (let i = 0; i < list.length; i += 50) {
+      const tanda = list.slice(i, i + 50);
+      btn.textContent = 'Cargando ' + Math.min(i + 50, list.length) + ' de ' + list.length + '…';
+      const r = await api('agregar', { pin: PIN, invitados: tanda });
+      r.resultados.forEach((x, j) => {
+        if (!x.ok) errs.push(x.nombre + ': ' + x.error);
+        else if (!x.mail) { sin.push({ nombre: x.nombre, token: x.token, telefono: tanda[j].telefono }); if (tanda[j].email) errs.push(x.nombre + ': mail no enviado (' + (x.error || '') + ')'); }
+      });
+    }
+    f.reset(); $('#csv').value = '';
+  } catch (x) { errs.push(x.message); }
+  finally { btn.disabled = false; btn.textContent = t0; }
+  if (errs.length) $('#ierr').textContent = errs.join(' · ');
+  showSinMail(sin); await load();
 };
 </script></body></html>

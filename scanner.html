@@ -29,11 +29,13 @@ async function login(p) {
   PIN = p; localStorage.setItem('lb_door_pin', p);
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); start();
 }
-$('#go').onclick = () => { $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
+$('#go').onclick = () => { if (scanner) return; $('#lerr').textContent = ''; login($('#pin').value.trim()).catch(e => $('#lerr').textContent = e.message); };
 $('#pin').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
 if (PIN) login(PIN).catch(() => localStorage.removeItem('lb_door_pin'));
 
 function start() {
+  if (scanner) return; // evita abrir la cámara dos veces
+  document.getElementById('reader').innerHTML = '';
   scanner = new Html5Qrcode('reader', { verbose: false, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
   const box = (w, h) => { const s = Math.max(200, Math.floor(Math.min(w, h) * 0.85)); return { width: s, height: s }; };
   scanner.start({ facingMode: 'environment' }, { fps: 15, qrbox: box, disableFlip: false }, onCode, () => {})

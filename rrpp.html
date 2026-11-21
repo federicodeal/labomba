@@ -58,6 +58,7 @@
 <div id="modal" class="modal hidden"></div>
 <script src="config.js"></script><script src="api.js"></script>
 <script>
+function precioAhora() { const C = window.LB_CONFIG || {}, n = Date.now(), t = (C.PRECIOS || []).find(x => !x.hasta || n < Date.parse(x.hasta)); return t ? t.precio : (C.PRECIO_NUM || 500); }
 let PIN = sessionStorage.getItem('lb_rp_pin') || '', D = null;
 let LISTA = false;
 api('rrpp_lista', {}).then(r => {
@@ -108,7 +109,7 @@ async function load() {
 }
 function payCard(g) {
   const buyer = g.find(o => o.nota === 'comprador') || g[g.length - 1], n = g.length;
-  const total = '$ ' + (n * (window.LB_CONFIG.PRECIO_NUM || 2000)).toLocaleString('es-UY');
+  const total = '$ ' + (n * precioAhora()).toLocaleString('es-UY');
   const names = n > 1 ? '<small style="margin-top:4px;color:#C9D4D6">' + g.map(o => esc(o.nombre) + (o.email && o.email !== buyer.email ? ' <span style="color:var(--muted)">(' + esc(o.email) + ')</span>' : '')).join('<br>') + '</small>' : '';
   return '<div class="person" data-t="' + esc(buyer.token) + '"><div class="top"><div class="av">' + (n > 1 ? n : esc(initials(buyer.nombre))) + '</div>' +
     '<div class="info"><b>' + esc(buyer.nombre) + ' · ' + n + (n > 1 ? ' entradas' : ' entrada') + ' · ' + total + '</b><small>' + [buyer.email, buyer.telefono].filter(Boolean).map(esc).join(' · ') + '</small>' +

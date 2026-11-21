@@ -46,6 +46,13 @@ textarea{min-height:120px;resize:vertical}
 .ok-block .badge{width:84px;height:84px;border-radius:50%;margin:0 auto 16px;background:radial-gradient(circle at 40% 35%,#34d36a,#15803d);display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px rgba(34,197,94,.45);font-size:42px;color:#fff}
 .ok-block h2{font-family:'Barlow Condensed';font-weight:800;font-size:32px;letter-spacing:.04em;text-transform:uppercase;line-height:1;margin-bottom:10px}
 .hidden{display:none!important}
+/* cantidad */
+.qty{display:flex;align-items:center;gap:10px}
+.qty button{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.45);color:#fff;font-size:24px;cursor:pointer}
+.qty b{font-family:'Bebas Neue';font-size:36px;min-width:34px;text-align:center}
+.total{margin-left:auto;font-family:'Barlow Condensed';font-weight:800;font-size:22px;letter-spacing:.06em;text-transform:uppercase;color:#fff;text-shadow:0 0 12px var(--glow)}
+.comp{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+.comp .kicker{font-size:12px}
 /* admin */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 0 12px}
 .topbar .brand{display:flex;align-items:center;gap:8px}.topbar .brand img{width:28px}.topbar .logo{font-size:30px}
